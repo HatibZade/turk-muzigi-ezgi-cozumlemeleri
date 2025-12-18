@@ -1,31 +1,15 @@
 # app_latest.py
-# Streamlit app: Makam olasılığı (Nazari Seyir: Âgâz, Kutb/Merkez, Karar)
-# + Nim filtreleme (Nim perde adı delili ile)
-# + MusicXML mikrotonal işaret teşhisi (sağ panel) — filtreyi DELMEZ.
+# Streamlit: Makam olasılığı + MusicXML mikrotonal teşhis (AEU/Halk müziği işaretleri)
+# Bu sürümün kritik davranışları:
+#  1) Nazari Seyir alanları: Âgâz (başlangıç), Kutb (Merkez), Karar
+#  2) Nazari Seyir "sert filtre": girilen alanlar birebir uyuşmuyorsa makam elenir.
+#     Eğer sert filtre sonucu 0 aday kalırsa, otomatik "yumuşak mod"a geçer:
+#        - sadece Karar üzerinden eleme yapılır; Âgâz/Kutb skorla etkiler.
+#  3) Nim filtresi: SADECE "nim perde adı delili" (isim olarak) üzerinden çalışır.
+#     MusicXML'den mikro işaret tespiti sağda teşhis olarak gösterilir; filtreyi delmez.
 #
 # Gereksinimler:
 #   pip install streamlit music21
-#
-# Not:
-# - Makam önerisi için asıl kural: Kullanıcı Âgâz/Kutb/Karar veriyorsa, bu üçlü ile
-#   çelişen makamlar ELENİR (tutarlılık filtresi). Skor sadece kalanlar arasında sıralama içindir.
-# - Nim filtresi: Kullanıcı "nim perde adı delili" seçmezse, nim gerektiren makamlar (örn. Hicaz)
-#   aday havuzundan çıkarılır. MusicXML’de mikro işaret tespiti sadece teşhistir.
-#
-# Mikrotonal işaret okuma (teşhis) — Halk müziği sayı yazımı dahil:
-# - ♯ üzerinde sayı yoksa -> Bakıyye
-# - ♯ üzerinde 5 varsa    -> Küçük Mücenneb
-# - ♭ üzerinde sayı yoksa -> Küçük Mücenneb
-# - ♭ üzerinde 4 varsa    -> Bakıyye
-# - ♭ üzerinde 1/2/3      -> Koma/İrha
-# - Oklu/özel işaretler (metinde pest/dik geçerse, sayı yoksa):
-#     pest diyez -> Bakıyye
-#     diyez      -> (yukarıdaki kural: sayı yoksa Bakıyye)
-#     dik diyez  -> Büyük Mücenneb
-#     dik bemol  -> Bakıyye
-#     pest bemol -> Büyük Mücenneb
-#     pest bekar <-> dik diyez  (Büyük Mücenneb)
-#     dik bekar  <-> pest bemol (Büyük Mücenneb)
 
 import io
 import re
@@ -45,106 +29,111 @@ except Exception:
 
 
 # -----------------------------
-# Yardımcılar
+# Yardımcı: karşılaştırma için normalize
+# (NOT: UI etiketleri asla normalize edilmez)
 # -----------------------------
 def norm(s: str) -> str:
-    """
-    Eşleştirme için normalizasyon.
-    - Şapka/üst çizgi gibi telaffuz işaretlerini normalize eder (eşleştirme için),
-      AMA UI etiketlerini ASLA bu fonksiyondan geçirmiyoruz.
-    """
     s = (s or "").strip().lower()
+    # Diakritikleri sök (şurî/şurī/şuri -> aynı anahtar)
     s = unicodedata.normalize("NFKD", s)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    s = s.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç", "c").replace("ö", "o").replace("ü", "u")
+    s = (
+        s.replace("ı", "i")
+         .replace("ş", "s")
+         .replace("ğ", "g")
+         .replace("ç", "c")
+         .replace("ö", "o")
+         .replace("ü", "u")
+    )
     s = re.sub(r"\s+", " ", s)
     return s
 
 
 # -----------------------------
-# Makam veri modeli (örnek set)
+# Makam veri modeli
 # -----------------------------
 @dataclass
 class MakamDef:
     name: str
     karar: str
-    kutb: str     # Merkez
-    agaz: str     # Başlangıç
+    kutb: str   # merkez
+    agaz: str
+    asil_alt: str
+    asil_ust: str
     requires_nim: bool
 
 
-# Not: Bu liste, senin 17'lik setinin tamamı olmayabilir; ama mantık doğru çalışır.
-# Senin verdiğin kritik düzeltme:
-# Uşşak: Karar=Dügâh, Kutb=Dügâh, Âgâz=Dügâh
+# NOT: Bu liste örnek/başlangıç setidir. Senin gerçek 17 makam tanımın varsa burayı onunla doldurmalısın.
+# Buradaki en önemli şey: Uşşak tanımı "dügah, dügah, dügah" olmalıdır (senin dediğin gibi).
 MAKAMS: List[MakamDef] = [
-    MakamDef("Uşşak", "Dügâh", "Dügâh", "Dügâh", False),
-    MakamDef("Rast", "Rast", "Rast", "Rast", False),
-    MakamDef("Hüseynî", "Dügâh", "Hüseynî", "Hüseynî", False),
-    MakamDef("Nihâvend", "Rast", "Rast", "Rast", False),
-    MakamDef("Kürdî", "Dügâh", "Dügâh", "Dügâh", False),
-    MakamDef("Buselik", "Dügâh", "Dügâh", "Dügâh", False),
-    MakamDef("Segâh", "Segâh", "Segâh", "Segâh", False),
-    MakamDef("Mahûr", "Rast", "Rast", "Rast", False),
-
-    # Nim gerektiren örnekler (filtre için):
-    MakamDef("Hicâz", "Dügâh", "Nevâ", "Nevâ", True),
-    MakamDef("Nikriz", "Rast", "Nevâ", "Nevâ", True),
-    MakamDef("Sabâ", "Dügâh", "Çargâh", "Dügâh", True),
-    MakamDef("Hüzzâm", "Segâh", "Nevâ", "Segâh", True),
-    MakamDef("Karciğar", "Dügâh", "Nevâ", "Dügâh", True),
-    MakamDef("Bayâtî", "Dügâh", "Nevâ", "Dügâh", True),
-    MakamDef("Şehnâz", "Dügâh", "Nevâ", "Tiz Nevâ", True),
-    MakamDef("Hümâyûn", "Dügâh", "Nevâ", "Dügâh", True),
+    MakamDef("Uşşak", "Dügâh", "Dügâh", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Rast", "Rast", "Rast", "Rast", "Yegâh", "Gerdâniye", False),
+    MakamDef("Hüseynî", "Dügâh", "Hüseynî", "Dügâh", "Yegâh", "Tiz Hüseynî", False),
+    MakamDef("Nihâvend", "Rast", "Rast", "Rast", "Yegâh", "Tiz Rast", False),
+    MakamDef("Hicaz", "Dügâh", "Nevâ", "Nevâ", "Yegâh", "Gerdâniye", True),
+    MakamDef("Saba", "Dügâh", "Çargâh", "Dügâh", "Yegâh", "Nevâ", True),
+    MakamDef("Nikriz", "Rast", "Nevâ", "Rast", "Yegâh", "Gerdâniye", True),
+    MakamDef("Segâh", "Segâh", "Segâh", "Segâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Hüzzam", "Segâh", "Nevâ", "Segâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Bayâtî", "Dügâh", "Nevâ", "Nevâ", "Yegâh", "Gerdâniye", True),
+    MakamDef("Şehnâz", "Dügâh", "Nevâ", "Tiz Nevâ", "Yegâh", "Tiz Nevâ", True),
 ]
 
 
 # -----------------------------
-# Nazari seyir tutarlılık filtresi (KRİTİK)
+# Nazari filtre + skor
 # -----------------------------
-def nazari_compatible(m: MakamDef, features: Dict[str, str]) -> bool:
-    """
-    Kullanıcı bir alanı doldurduysa, o alanla ÇELİŞEN makam elenir.
-    """
-    if features.get("karar") and norm(features["karar"]) != norm(m.karar):
+def nazari_filter_strict(m: MakamDef, f: Dict[str, str]) -> bool:
+    # girilen alanlar boş değilse birebir eşleşme zorunlu
+    if f.get("karar") and norm(f["karar"]) != norm(m.karar):
         return False
-    if features.get("kutb") and norm(features["kutb"]) != norm(m.kutb):
+    if f.get("merkez") and norm(f["merkez"]) != norm(m.kutb):
         return False
-    if features.get("agaz") and norm(features["agaz"]) != norm(m.agaz):
+    if f.get("agaz") and norm(f["agaz"]) != norm(m.agaz):
         return False
     return True
 
 
-def score_makam(m: MakamDef, features: Dict[str, str]) -> float:
-    """
-    Skor: tutarlılık filtresinden geçmiş adayları sıralamak için hafif ağırlık.
-    """
+def nazari_filter_soft(m: MakamDef, f: Dict[str, str]) -> bool:
+    # yumuşak mod: sadece karar eleme kriteri
+    if f.get("karar") and norm(f["karar"]) != norm(m.karar):
+        return False
+    return True
+
+
+def score_makam(m: MakamDef, f: Dict[str, str]) -> float:
+    # yumuşak modda da sıralama için kullanılır; sert modda zaten filtrelenmiş adaylar skorlanır.
     score = 0.0
-    if features.get("karar") and norm(features["karar"]) == norm(m.karar):
+    if f.get("karar") and norm(f["karar"]) == norm(m.karar):
+        score += 4.0
+    if f.get("merkez") and norm(f["merkez"]) == norm(m.kutb):
         score += 3.0
-    if features.get("kutb") and norm(features["kutb"]) == norm(m.kutb):
-        score += 2.0
-    if features.get("agaz") and norm(features["agaz"]) == norm(m.agaz):
-        score += 2.0
+    if f.get("agaz") and norm(f["agaz"]) == norm(m.agaz):
+        score += 2.5
+    # alan sınırları (opsiyonel)
+    if f.get("alt") and norm(f["alt"]) == norm(m.asil_alt):
+        score += 1.0
+    if f.get("ust") and norm(f["ust"]) == norm(m.asil_ust):
+        score += 1.0
     return score
 
 
-def rank_makams(makams: List[MakamDef], features: Dict[str, str], topk: int) -> List[Tuple[MakamDef, float]]:
-    scored = [(m, score_makam(m, features)) for m in makams]
+def rank_makams(makams: List[MakamDef], f: Dict[str, str], topk: int) -> List[Tuple[MakamDef, float]]:
+    scored = [(m, score_makam(m, f)) for m in makams]
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:topk]
 
 
-def filter_makams_by_nim_name_evidence(makams: List[MakamDef], has_nim_name_evidence: bool) -> List[MakamDef]:
+def filter_makams_by_nim(makams: List[MakamDef], has_nim_name_evidence: bool) -> List[MakamDef]:
     if has_nim_name_evidence:
         return makams
     return [m for m in makams if not m.requires_nim]
 
 
 # -----------------------------
-# Mikrotonal teşhis (MusicXML) — filtreyi etkilemez
+# MusicXML mikrotonal teşhis (filtreyi etkilemez)
 # -----------------------------
 DIGITS_RE = re.compile(r"\b([1-9]|1[0-9])\b")
-
 
 def extract_koma_number_from_text(text: str) -> Optional[int]:
     if not text:
@@ -163,12 +152,11 @@ def collect_note_attached_text(n: Any) -> str:
     # lyrics
     try:
         for lyr in getattr(n, "lyrics", []) or []:
-            t = getattr(lyr, "text", None)
-            if t:
-                texts.append(str(t))
+            if getattr(lyr, "text", None):
+                texts.append(str(lyr.text))
     except Exception:
         pass
-    # expressions / misc
+    # expressions
     try:
         for ex in getattr(n, "expressions", []) or []:
             if hasattr(ex, "content"):
@@ -177,6 +165,7 @@ def collect_note_attached_text(n: Any) -> str:
                 texts.append(str(ex))
     except Exception:
         pass
+    # editorial misc
     try:
         ed = getattr(n, "editorial", None)
         if ed and hasattr(ed, "misc") and isinstance(ed.misc, dict):
@@ -213,7 +202,18 @@ def classify_interval_from_accidental(
     is_natural: bool,
     koma_number: Optional[int],
 ) -> str:
-    # 1) Üst sayı override (Halk müziği)
+    """
+    Teşhis sınıfı:
+      natural | bakiyye | kucuk_mucenneb | buyuk_mucenneb | koma_irha | unknown_micro
+    Kural seti (senin son kararların):
+      - Diyezde sayı yoksa: bakiyye
+      - Diyezde 5 varsa: küçük mücenneb
+      - Bemolde sayı yoksa: küçük mücenneb
+      - Bemolde 4 varsa: bakiyye
+      - Bemolde 1/2/3 varsa: koma/irha
+      - Oklu işaretler (metinden yakalanırsa) sayı yoksa devreye girer
+    """
+    # 1) sayı override
     if koma_number is not None:
         if is_flat and koma_number in (1, 2, 3):
             return "koma_irha"
@@ -221,9 +221,11 @@ def classify_interval_from_accidental(
             return "bakiyye"
         if is_sharp and koma_number == 5:
             return "kucuk_mucenneb"
-        return "unknown_micro"
+        # başka sayılar -> mikro ama sınıf belirsiz
+        if is_sharp or is_flat:
+            return "unknown_micro"
 
-    # 2) Metinden pest/dik yakala (sayı yoksa)
+    # 2) oklu/özel isim yakalama (sayı yoksa)
     a = norm(acc_name or "")
     if "pest" in a and ("sharp" in a or "diyez" in a or "diez" in a):
         return "bakiyye"
@@ -238,12 +240,10 @@ def classify_interval_from_accidental(
     if "dik" in a and ("natural" in a or "bekar" in a or "nat" in a):
         return "buyuk_mucenneb"
 
-    # 3) Normal işaretler
+    # 3) normal işaretler
     if is_sharp:
-        # sayı yoksa diyez = Bakıyye (senin son kuralın)
         return "bakiyye"
     if is_flat:
-        # sayı yoksa bemol = Küçük Mücenneb
         return "kucuk_mucenneb"
     if is_natural:
         return "natural"
@@ -275,11 +275,11 @@ def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
         counts[interval_class] = counts.get(interval_class, 0) + 1
         if len(samples) < 12 and interval_class != "natural":
             try:
-                pn = n.pitch.nameWithOctave
+                pitch_name = n.pitch.nameWithOctave
             except Exception:
-                pn = "?"
+                pitch_name = "?"
             samples.append(
-                f"- {pn} | accidental={acc_name or '—'} | text='{attached_text or '—'}' | koma={koma_n or '—'} => **{interval_class}**"
+                f"- {pitch_name} | accidental={acc_name or '—'} | text='{attached_text or '—'}' | koma={koma_n or '—'} => **{interval_class}**"
             )
 
     if score is None:
@@ -292,154 +292,154 @@ def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
             for nn in el.notes:
                 handle_note(nn)
 
-    has_micro = (counts["bakiyye"] + counts["kucuk_mucenneb"] + counts["buyuk_mucenneb"] + counts["koma_irha"] + counts["unknown_micro"]) > 0
+    has_micro = (
+        counts["bakiyye"]
+        + counts["kucuk_mucenneb"]
+        + counts["buyuk_mucenneb"]
+        + counts["koma_irha"]
+        + counts["unknown_micro"]
+    ) > 0
     return {"counts": counts, "has_micro": has_micro, "samples": samples}
 
 
 # -----------------------------
 # UI
 # -----------------------------
-st.set_page_config(page_title="Makam Tahmini (Nazari Seyir + Nim Delili)", layout="wide")
-st.title("Makam Olasılığı — Nazari Seyir (Âgâz, Kutb, Karar) + Nim Delili")
+st.set_page_config(page_title="Nazari Seyir + Nim Filtresi", layout="wide")
+st.title("Makam Olasılığı — Nazari Seyir (Âgâz / Kutb / Karar) + Nim İsim Delili")
 
 with st.sidebar:
     st.subheader("Dosya Yükleme")
-    uploaded = st.file_uploader("MusicXML önerilir (xml/mxl). PDF sadece manuel nim için.", type=["xml", "musicxml", "mxl", "pdf"])
-    st.caption("MusicXML: mikro işaretler sağda teşhis olarak görünür. Filtreyi nim-perde adı delili belirler.")
+    uploaded = st.file_uploader("MusicXML (xml/mxl) önerilir", type=["xml", "musicxml", "mxl", "pdf"])
+    st.caption("MusicXML mikro işaret teşhisi sağda gösterilir. Nim filtresi isim deliline göre çalışır.")
 
     st.markdown("---")
     st.subheader("Nazari Seyir")
     karar = st.text_input("Karar")
-    kutb = st.text_input("Kutb (Merkez)")
+    merkez = st.text_input("Kutb (Merkez)")
     agaz = st.text_input("Âgâz (Başlangıç)")
 
     st.markdown("---")
+    st.subheader("Asıl Alan (opsiyonel)")
+    alt = st.text_input("Asıl alan alt sınır")
+    ust = st.text_input("Asıl alan üst sınır")
+
+    st.markdown("---")
     st.subheader("Nim perde adı delili (isim olarak)")
-
-    # Unicode: Şurū = "Şurū" (u + combining macron) daha güvenli render
-    SURU_LONG_U = "Şuru\u0304"   # Şurū
-    # Zengûle: u şapkalı
-    ZENG_CIRC = "Zengûle"
-
+    # UI etiketleri telaffuz işaretleriyle doğru verilir.
     NIM_NAME_OPTIONS: Dict[str, Tuple[str, List[str]]] = {
-        "nim_hisar": ("Bayati / Nim Hisar", ["bayati", "nim hisar"]),
-        "hisar": ("Dik Bayati / Hisar", ["dik bayati", "hisar"]),
-        "dik_hisar": ("Pest Hüseyni / Dik Hisar", ["pest huseyni", "pest hüseyni", "dik hisar"]),
-
+        "nim_hisar": ("Bayâtî / Nim Hisar", ["bayati", "bayâtî", "nim hisar"]),
         "nim_hicaz": ("Saba / Nim Hicaz", ["saba", "nim hicaz"]),
+        # Şurū: u üst çizgi (uzatma). Zengûle: u şapka (yumuşatma).
+        "nim_zengule": ("Şurū / Nim Zengûle", ["şurū", "şurî", "şuri", "nim zengûle", "nim zengule", "nim zengūle"]),
+        "nim_sehnaz": ("Tiz Şurū / Nim Şehnâz", ["tiz şurū", "tiz şuri", "nim şehnaz", "nim sehnaz"]),
+        # Çift ad düzeltmesi:
+        "dik_zengule": ("Pest Dügâh / Dik Zengûle", ["pest dügâh", "pest dugah", "dik zengule", "dik zengûle"]),
+        "dik_hicaz": ("Pest Nevâ / Dik Hicaz", ["pest neva", "pest nevâ", "dik hicaz"]),
+        "hisar": ("Dik Bayâtî / Hisar", ["dik bayati", "dik bayâtî", "hisar"]),
+        "dik_hisar": ("Pest Hüseynî / Dik Hisar", ["pest huseyni", "pest hüseynî", "dik hisar"]),
+        "zengule": ("Dik Şurū / Zengûle", ["dik şurū", "dik şuri", "zengule", "zengûle"]),
         "hicaz": ("Dik Saba / Hicaz", ["dik saba", "hicaz"]),
-        "dik_hicaz": ("Pest Neva / Dik Hicaz", ["pest neva", "dik hicaz"]),
-
-        # Senin telaffuz kuralına göre: Şurū (u uzun), Zengûle (u şapkalı)
-        "nim_zengule": (f"{SURU_LONG_U} / Nim {ZENG_CIRC}", ["şuri", "şurî", "şurī", "şurū", "nim zengule", "nim zengûle", "nim zengūle"]),
-        "zengule": ("Dik Şuri / Zengule", ["dik şuri", "dik suri", "zengule", "zengüle"]),
-
-        "dik_zengule": ("Pest Dügâh / Dik Zengûle", ["pest dugah", "pest dügâh", "dik zengule", "dik zengûle"]),
-
-        "nim_sehnaz": ("Tiz Şuri / Nim Şehnaz", ["tiz şuri", "tiz suri", "nim sehnaz", "nim şehnaz"]),
-        "sehnaz": ("Tiz Dik Şuri / Şehnaz", ["tiz dik şuri", "tiz dik suri", "sehnaz", "şehnaz"]),
+        "sehnaz": ("Tiz Dik Şurū / Şehnâz", ["tiz dik şurū", "tiz dik şuri", "şehnaz", "şehnâz", "sehnaz"]),
     }
 
     labels = [v[0] for v in NIM_NAME_OPTIONS.values()]
     selected_labels = st.multiselect("Metinde/analizde adı geçenler (yoksa boş bırak)", labels)
-
     label_to_key = {v[0]: k for k, v in NIM_NAME_OPTIONS.items()}
     selected_keys = {label_to_key[lbl] for lbl in selected_labels if lbl in label_to_key}
     has_nim_name_evidence = len(selected_keys) > 0
-
-    st.caption("Boş bırakırsan Hicâz gibi nim gerektiren makamlar filtrelenir.")
+    st.caption("Boş bırakırsan Hicaz gibi nim gerektiren makamlar filtrelenir.")
 
     st.markdown("---")
-    st.subheader("PDF için manuel nim (isteğe bağlı)")
-    manual_nim = st.checkbox("PDF yükledim ve nim perde adı delili var", value=False)
-    topk = st.slider("Kaç sonuç gösterilsin?", 3, 17, 9)
+    topk = st.slider("Kaç sonuç gösterilsin?", 3, 25, 9)
 
-features = {"karar": karar, "kutb": kutb, "agaz": agaz}
 
-# Dosya okuma
+features = {"karar": karar, "merkez": merkez, "agaz": agaz, "alt": alt, "ust": ust}
+
+# MusicXML teşhis
 file_kind = None
-score_obj = None
 micro = {"counts": {}, "has_micro": False, "samples": []}
 file_error = None
 
 if uploaded is not None:
     name = uploaded.name.lower()
     data = uploaded.read()
-
     if name.endswith((".xml", ".musicxml", ".mxl")):
         file_kind = "musicxml"
         if not M21_OK:
             file_error = "music21 yüklü değil. `pip install music21`"
         else:
             try:
-                score_obj = converter.parse(io.BytesIO(data))
-                micro = detect_micro_intervals_in_score(score_obj)
+                score = converter.parse(io.BytesIO(data))
+                micro = detect_micro_intervals_in_score(score)
             except Exception as e:
                 file_error = f"MusicXML parse edilemedi: {e}"
     elif name.endswith(".pdf"):
         file_kind = "pdf"
 
-# Nim filtresi için esas: İSİM DELİLİ (ve PDF manuel)
-has_nim_for_filter = bool(has_nim_name_evidence or (file_kind == "pdf" and manual_nim))
+# Nim filtresi yalnız isim deliline göre:
+has_nim_for_filter = has_nim_name_evidence
 
 # 1) Nim filtresi
-nim_filtered = filter_makams_by_nim_name_evidence(MAKAMS, has_nim_for_filter)
+candidates0 = filter_makams_by_nim(MAKAMS, has_nim_for_filter)
 
-# 2) Nazari tutarlılık filtresi (KRİTİK)
-nazari_filtered = [m for m in nim_filtered if nazari_compatible(m, features)]
+# 2) Nazari filtre: önce sert, 0 ise yumuşak
+candidates = [m for m in candidates0 if nazari_filter_strict(m, features)]
+used_soft = False
+if len(candidates) == 0:
+    candidates = [m for m in candidates0 if nazari_filter_soft(m, features)]
+    used_soft = True
 
-# 3) Sıralama
-ranked = rank_makams(nazari_filtered, features, topk)
+ranked = rank_makams(candidates, features, topk)
 
 # -----------------------------
 # Output
 # -----------------------------
-left, right = st.columns([1.2, 1])
+left, right = st.columns([1.25, 1])
 
 with left:
     st.subheader("Sonuçlar")
-
     if uploaded is not None:
         st.write("**Dosya:**", uploaded.name)
+        st.write("**Dosya türü:**", file_kind)
         if file_error:
             st.error(file_error)
-        else:
-            st.write("**Dosya türü:**", file_kind)
 
-    st.write("**Nim delili (filtre):**", "✅ Var" if has_nim_for_filter else "❌ Yok")
-    st.write("**Aday havuzu (nim filtresi sonrası):**", f"{len(nim_filtered)} / {len(MAKAMS)}")
-    st.write("**Aday havuzu (nazari tutarlılık sonrası):**", f"{len(nazari_filtered)} / {len(nim_filtered)}")
+    st.write("**Nim filtresi (isim delili):**", "✅ Var" if has_nim_for_filter else "❌ Yok")
+    if file_kind == "musicxml" and not file_error:
+        st.write("**Mikro işaret teşhisi (MusicXML):**", "✅ Var" if micro.get("has_micro") else "❌ Yok")
 
+    if used_soft and (features.get("agaz") or features.get("merkez")):
+        st.warning("Girdiğin Karar/Âgâz/Kutb üçlüsüne birebir uyan tanım listede bulunamadı. Sadece Karar ile yumuşatılmış arama gösteriliyor.")
+
+    st.write("**Aday havuz:**", f"{len(candidates)} / {len(MAKAMS)}")
     st.markdown("---")
 
-    if not any(v.strip() for v in features.values()) and uploaded is None:
-        st.info("Soldan Âgâz/Kutb/Karar gir veya (isteğe bağlı) MusicXML yükle.")
+    if len(ranked) == 0:
+        st.error("Uygun makam bulunamadı. (Tanım listeni ve yazımını kontrol et.)")
     else:
-        if not ranked:
-            st.warning("Bu Âgâz/Kutb/Karar kombinasyonuyla tutarlı makam bulunamadı (veya nim filtresi hepsini eledi).")
         for i, (m, sc) in enumerate(ranked, start=1):
             st.markdown(f"### {i}) {m.name}")
             st.write(f"Skor: **{sc:.2f}**")
-            st.write(f"Karar: **{m.karar}**  |  Kutb: **{m.kutb}**  |  Âgâz: **{m.agaz}**")
+            st.write(f"Karar: {m.karar} — Kutb: {m.kutb} — Âgâz: {m.agaz}")
+            st.write(f"Asıl alan: {m.asil_alt} → {m.asil_ust}")
             st.write(f"Nim gerektirir mi?: {'Evet' if m.requires_nim else 'Hayır'}")
             st.markdown("---")
 
 with right:
-    st.subheader("Mikrotonal Teşhis (MusicXML) — filtreyi etkilemez")
+    st.subheader("Mikrotonal Teşhis (MusicXML)")
     if file_kind != "musicxml":
-        st.info("Teşhis için MusicXML yükle. PDF'de otomatik mikro okuma yok.")
+        st.info("Teşhis için MusicXML yükle (PDF’de sayı/işaret okumak burada yapılmıyor).")
     elif file_error:
         st.warning("Dosya okunamadı; teşhis gösterilemiyor.")
     else:
-        st.write("**Mikro (işaret/sayı teşhisi):**", "✅ Var" if micro.get("has_micro") else "❌ Yok")
         st.write("**Sayım (interval sınıfı):**")
         st.json(micro.get("counts", {}))
-
         st.markdown("**Örnek yakalamalar (ilk 12 mikro olay):**")
         if micro.get("samples"):
             st.markdown("\n".join(micro["samples"]))
         else:
-            st.write("Mikro olay yakalanmadı (ya gerçekten yok, ya da export metni notaya bağlamamış olabilir).")
+            st.write("Mikro olay yakalanmadı (ya yok, ya da export metni notaya bağlamamış olabilir).")
 
         st.markdown("---")
         st.subheader("Teşhis Kuralları (özet)")
@@ -450,6 +450,14 @@ with right:
 - **♭ üstünde sayı yoksa → Küçük Mücenneb**
 - **♭⁴ → Bakıyye**
 - **♭¹/²/³ → Koma/İrha**
-- `pest/dik` metni varsa (sayı yoksa) özel sınıflar uygulanır.
+- Oklu/özel işaret metinleri (sayı yoksa):
+  - pest diyez → Bakıyye
+  - dik diyez → Büyük Mücenneb
+  - dik bemol → Bakıyye
+  - pest bemol → Büyük Mücenneb
+  - pest bekar ↔ dik diyez
+  - dik bekar ↔ pest bemol
+
+> Bu teşhis, **nim filtresini etkilemez**; nim filtresi yalnız “isim delili” ile çalışır.
 """
         )
