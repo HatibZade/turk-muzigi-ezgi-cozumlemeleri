@@ -2,6 +2,8 @@ import streamlit as st
 import yaml
 from pathlib import Path
 import unicodedata
+import xml.etree.ElementTree as ET
+from collections import Counter
 
 # ------------------ SAYFA AYARLARI ------------------
 st.set_page_config(page_title="Türk Müziği Ezgi Çözümlemeleri", layout="wide")
@@ -12,12 +14,12 @@ DATA_PATH = Path("data") / "makamlar.yaml"
 
 # ------------------ NORMALİZASYON ------------------
 def normalize_perde(s: str) -> str:
+    """Şapka/macron ve Türkçe harf farklarını yok sayarak karşılaştırma."""
     if not s:
         return ""
     s = str(s).strip().lower()
     s = unicodedata.normalize("NFD", s)
     s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
-
     tr_map = {
         "ş": "s", "ğ": "g", "ı": "i", "ö": "o", "ü": "u", "ç": "c",
         "â": "a", "î": "i", "û": "u",
@@ -25,7 +27,6 @@ def normalize_perde(s: str) -> str:
     }
     for k, v in tr_map.items():
         s = s.replace(k, v)
-
     s = " ".join(s.split())
     return s
 
@@ -35,6 +36,144 @@ def normalize_list(values):
     if isinstance(values, list):
         return [normalize_perde(v) for v in values if v is not None]
     return [normalize_perde(values)]
+
+# ------------------ MUSICXML (BASİT) OKUMA ------------------
+STEP_TO_SEMI = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+def pitch_to_midi(step: str, octave: int, alter: int = 0) -> int:
+    return (octave + 1) * 12 + STEP_TO_SEMI.get(step, 0) + int(alter)
+
+def parse_musicxml_bytes(file_bytes: bytes):
+    """
+    MusicXML'den (step, octave, alter) dizisi çıkarır.
+    Mikroton/komalı notalar çoğu XML'de farklı tutulur; v1 için diatonik temel okuyoruz.
+    """
+    try:
+        root = ET.fromstring(file_bytes)
+    except Exception:
+        return []
+
+    pitches = []
+    for note in root.findall(".//note"):
+        if note.find("rest") is not None:
+            continue
+        pitch = note.find("pitch")
+        if pitch is None:
+            continue
+        step = pitch.findtext("step")
+        octave = pitch.findtext("octave")
+        alter = pitch.findtext("alter") or "0"
+        if step and octave:
+            try:
+                pitches.append((step, int(octave), int(float(alter))))
+            except Exception:
+                pass
+    return pitches
+
+# Türk müziği "tam perde" adlarını kaba MIDI referans haritasına oturtuyoruz (yaklaşık, diatonik).
+# Varsayılan: rast = C4 (MIDI 60)
+TAM_PERDELER_UI = [
+    "yegâh", "aşîrān", "ırâk", "rast", "dügâh", "segâh", "çargâh", "nevâ", "hüseynî",
+    "evc", "gerdaniyye", "muhayyer", "tîz segâh", "tîz çargâh", "tîz nevâ"
+]
+ALL_PERDELER_UI = ["—"] + TAM_PERDELER_UI
+
+# Nim perdeleri UI (eşleşme normalize)
+NIM_PERDELER_UI = [
+    "nerm bayatî", "nerm hisar", "pest aşîrān",
+    "acem-aşîrān", "dik acem-aşîrān",
+    "geveşt",
+    "şurî", "zengûle", "pest dügâh",
+    "kürdî", "dik kürdî",
+    "buselik", "nişābūr (buselik)",
+    "sabâ", "hicâz", "pest nevâ",
+    "bayatî", "hisar", "pest hüseynî",
+    "acem", "dik acem",
+    "mahûr",
+    "tîz şurî", "şehnāz", "pest muhayyer",
+    "sünbüle", "dik sünbüle"
+]
+
+def build_reference_midi_map(rast_midi: int = 60):
+    """
+    Rast=C4 varsayımıyla tam perde MIDI karşılıklarını üretir.
+    (Diatonik kaba eşleştirme; komalar yok.)
+    """
+    # rast = C4
+    ref = {
+        "rast": rast_midi,
+        "dügâh": rast_midi + 2,
+        "segâh": rast_midi + 4,
+        "çargâh": rast_midi + 5,
+        "nevâ": rast_midi + 7,
+        "hüseynî": rast_midi + 9,
+        "evc": rast_midi + 11,
+        "gerdaniyye": rast_midi + 12,
+        "muhayyer": rast_midi + 14,
+        "tîz segâh": rast_midi + 16,
+        "tîz çargâh": rast_midi + 17,
+        "tîz nevâ": rast_midi + 19,
+        "ırâk": rast_midi - 1,    # B3 (yaklaşık)
+        "aşîrān": rast_midi - 3,  # A3 (yaklaşık)
+        "yegâh": rast_midi - 5,   # G3 (yaklaşık)
+    }
+    # normalize anahtarlar
+    return {normalize_perde(k): v for k, v in ref.items()}
+
+def nearest_tam_perde_from_midi(midi_val: int, midi_map_norm: dict):
+    """midi değerini en yakın tam perdeye eşler (en yakın fark)."""
+    best = None
+    best_diff = 999
+    for perde_norm, p_midi in midi_map_norm.items():
+        diff = abs(midi_val - p_midi)
+        if diff < best_diff:
+            best = perde_norm
+            best_diff = diff
+    # çok uzaksa güvenme (ör. 2 yarı sesten fazla)
+    if best is None or best_diff > 2:
+        return None
+    return best
+
+def norm_to_ui_perde(perde_norm: str):
+    """normalize anahtardan UI yazımına döndür (bulamazsa None)."""
+    if not perde_norm:
+        return None
+    for ui in TAM_PERDELER_UI:
+        if normalize_perde(ui) == perde_norm:
+            return ui
+    return None
+
+def auto_features_from_musicxml(file_bytes: bytes, rast_midi: int):
+    """
+    MusicXML -> (karar_ui, merkez_ui, alt_ui, ust_ui) önerisi üretir.
+    """
+    pitches = parse_musicxml_bytes(file_bytes)
+    if not pitches:
+        return None
+
+    midis = [pitch_to_midi(s, o, a) for (s, o, a) in pitches]
+    last_midi = midis[-1]
+    center_midi = Counter(midis).most_common(1)[0][0]
+    lo, hi = min(midis), max(midis)
+
+    midi_map_norm = build_reference_midi_map(rast_midi)
+
+    karar_norm = nearest_tam_perde_from_midi(last_midi, midi_map_norm)
+    merkez_norm = nearest_tam_perde_from_midi(center_midi, midi_map_norm)
+    alt_norm = nearest_tam_perde_from_midi(lo, midi_map_norm)
+    ust_norm = nearest_tam_perde_from_midi(hi, midi_map_norm)
+
+    return {
+        "karar_ui": norm_to_ui_perde(karar_norm),
+        "merkez_ui": norm_to_ui_perde(merkez_norm),
+        "alt_ui": norm_to_ui_perde(alt_norm),
+        "ust_ui": norm_to_ui_perde(ust_norm),
+        "debug": {
+            "last_midi": last_midi,
+            "center_midi": center_midi,
+            "range_midi": (lo, hi),
+        }
+    }
 
 # ------------------ PUANLAMA ------------------
 def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_list=None):
@@ -47,7 +186,6 @@ def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_li
     nim_n = [normalize_perde(x) for x in nim_list]
 
     scored = []
-
     for m in profiles:
         score = 0
         reasons = []
@@ -104,31 +242,23 @@ if not isinstance(profiles, list) or not profiles:
 
 names = [m.get("name", "(isimsiz)") for m in profiles]
 
-# ------------------ UI LISTELER ------------------
-TAM_PERDELER_UI = [
-    "yegâh", "aşîrān", "ırâk", "rast", "dügâh", "segâh", "çargâh", "nevâ", "hüseynî",
-    "evc", "gerdaniyye", "muhayyer", "tîz segâh", "tîz çargâh", "tîz nevâ"
-]
-NIM_PERDELER_UI = [
-    "nerm bayatî", "nerm hisar", "pest aşîrān",
-    "acem-aşîrān", "dik acem-aşîrān",
-    "geveşt",
-    "şurî", "zengûle", "pest dügâh",
-    "kürdî", "dik kürdî",
-    "buselik", "nişābūr (buselik)",
-    "sabâ", "hicâz", "pest nevâ",
-    "bayatî", "hisar", "pest hüseynî",
-    "acem", "dik acem",
-    "mahûr",
-    "tîz şurî", "şehnāz", "pest muhayyer",
-    "sünbüle", "dik sünbüle"
-]
-ALL_PERDELER_UI = ["—"] + TAM_PERDELER_UI
+# ------------------ SESSION STATE (SEÇİMLER) ------------------
+# Selectbox'lar için anahtarlar
+if "karar_ui" not in st.session_state:
+    st.session_state.karar_ui = "—"
+if "merkez_ui" not in st.session_state:
+    st.session_state.merkez_ui = "—"
+if "alt_ui" not in st.session_state:
+    st.session_state.alt_ui = "—"
+if "ust_ui" not in st.session_state:
+    st.session_state.ust_ui = "—"
+if "nim_ui" not in st.session_state:
+    st.session_state.nim_ui = []
 
 # ------------------ SEKME ------------------
 tab1, tab2 = st.tabs(["📘 Ezgi Profilleri", "🎼 Nota Yükle"])
 
-# ------------------ TAB 1 ------------------
+# ------------------ TAB 1: PROFİLLER ------------------
 with tab1:
     secili = st.selectbox("Ezgi için olası profil", names)
     prof = next((m for m in profiles if m.get("name") == secili), None)
@@ -153,9 +283,15 @@ with tab1:
         st.markdown("**Nim:** " + (", ".join(nim) if nim else "—"))
 
         st.markdown("### Nazari Seyir")
-        st.markdown(f"- **Âgâz:** {', '.join((ns.get('agaz') or [])) if isinstance(ns.get('agaz'), list) else (ns.get('agaz') or '—')}")
-        st.markdown(f"- **Merkez:** {', '.join((ns.get('kutb') or [])) if isinstance(ns.get('kutb'), list) else (ns.get('kutb') or '—')}")
-        st.markdown(f"- **Karar:** {', '.join((ns.get('karar') or [])) if isinstance(ns.get('karar'), list) else (ns.get('karar') or '—')}")
+        agaz = ns.get("agaz", [])
+        kutb = ns.get("kutb", [])
+        karar = ns.get("karar", [])
+        if not isinstance(agaz, list): agaz = [agaz] if agaz else []
+        if not isinstance(kutb, list): kutb = [kutb] if kutb else []
+        if not isinstance(karar, list): karar = [karar] if karar else []
+        st.markdown(f"- **Âgâz:** {', '.join(agaz) or '—'}")
+        st.markdown(f"- **Merkez:** {', '.join(kutb) or '—'}")
+        st.markdown(f"- **Karar:** {', '.join(karar) or '—'}")
 
         st.markdown("### Asıl Seyir Alanı")
         st.markdown(f"**{asa.get('alt','—')} – {asa.get('ust','—')}**")
@@ -178,53 +314,82 @@ with tab1:
 
     with col2:
         st.subheader("Kısa Özet")
-        st.info("Seçilen profilin hızlı özeti. Nota yükleme ve olasılık için diğer sekmeyi kullan.")
+        st.info("Nota yükleyip olasılık üretmek için diğer sekmeyi kullan.")
 
-        ns = prof.get("nazari_seyir", {}) or {}
-        asa = prof.get("asil_seyir_alani", {}) or {}
-        kp = prof.get("kullanilan_perdeler", {}) or {}
-
-        st.markdown(
-            f"**Normalize edilmiş (eşleşme için):** "
-            f"Karar={', '.join(normalize_list(ns.get('karar'))) or '—'}, "
-            f"Merkez={', '.join(normalize_list(ns.get('kutb'))) or '—'}, "
-            f"Alan={normalize_perde(asa.get('alt','—'))}–{normalize_perde(asa.get('ust','—'))}"
-        )
-        st.caption("Not: Şapkalı/üst çizgili/düz yazımlar otomatik normalize edilir.")
-
-# ------------------ TAB 2 ------------------
+# ------------------ TAB 2: NOTA YÜKLE ------------------
 with tab2:
-    st.subheader("🎼 Nota Yükleme ve Olası Profil Önerisi")
+    st.subheader("🎼 Nota Yükle → Ezgi Özellikleri → Olası Profil")
 
-    st.warning(
-        "PDF notadan otomatik perde/seyir çıkarımı (OMR) bu sürümde yok. "
-        "PDF'yi yükleyip aşağıdan karar/merkez/alan/nim seçerek olasılık alırsınız."
+    st.caption(
+        "PDF görüntüleme bazı ortamlarda engellenebildiği için PDF'yi embed etmiyoruz. "
+        "MusicXML yüklersen otomatik öneri (karar/merkez/alan) çıkarır ve seçimleri doldurur."
     )
 
-    uploaded = st.file_uploader("PDF nota yükle", type=["pdf"])
-    if uploaded:
-        st.success(f"PDF yüklendi: {uploaded.name}")
-        # Google/iframe görüntüleme yok: sadece indirme
-        st.download_button(
-            "📥 Yüklenen PDF'yi indir",
-            data=uploaded.getvalue(),
-            file_name=uploaded.name,
-            mime="application/pdf"
+    # Upload: PDF + MusicXML + XML (+ görsel istersen)
+    uploaded = st.file_uploader(
+        "Nota dosyası yükle (PDF / MusicXML / XML)",
+        type=["pdf", "musicxml", "xml"]
+    )
+
+    # Reference ayarı: rast hangi batı notasına denk?
+    # Varsayılan rast=C4 (60). Kullanıcı değiştirirse otomatik eşleme daha doğru olabilir.
+    with st.expander("MusicXML eşleme ayarı (isteğe bağlı)", expanded=False):
+        st.caption("Bu ayar sadece MusicXML için kullanılır. Varsayılan: rast = C4.")
+        rast_ref = st.selectbox(
+            "Rast hangi batı notasına denk varsayılsın?",
+            ["C4 (varsayılan)", "D4", "E4", "F4", "G4", "A4", "B4"],
+            index=0
         )
-        st.caption("Görüntüleme bazı ortamlarda engellenebildiği için önizleme kaldırıldı.")
+        rast_midi_map = {"C4 (varsayılan)": 60, "D4": 62, "E4": 64, "F4": 65, "G4": 67, "A4": 69, "B4": 71}
+        rast_midi = rast_midi_map[rast_ref]
+
+    if uploaded:
+        file_bytes = uploaded.getvalue()
+        ext = uploaded.name.split(".")[-1].lower()
+
+        st.success(f"Yüklendi: {uploaded.name}")
+
+        if ext == "pdf":
+            # PDF embed yok. İndirilebilir kalsın.
+            st.download_button(
+                "📥 PDF'yi indir",
+                data=file_bytes,
+                file_name=uploaded.name,
+                mime="application/pdf"
+            )
+            st.info("PDF’den otomatik nota okuma (OMR) bu sürümde yok. Aşağıdan seçim yaparak olasılık alabilirsiniz.")
+
+        if ext in ["musicxml", "xml"]:
+            auto = auto_features_from_musicxml(file_bytes, rast_midi=rast_midi)
+            if auto is None:
+                st.warning("MusicXML okundu ama nota bulunamadı. Dosya formatını kontrol edin.")
+            else:
+                st.success("MusicXML’den otomatik öneri çıkarıldı (v1, diatonik yaklaşık).")
+                st.write("Öneriler:")
+                st.write(f"- Karar: **{auto.get('karar_ui') or '—'}**")
+                st.write(f"- Merkez: **{auto.get('merkez_ui') or '—'}**")
+                st.write(f"- Alan: **{auto.get('alt_ui') or '—'} – {auto.get('ust_ui') or '—'}**")
+                st.caption(f"Debug: last_midi={auto['debug']['last_midi']}, center_midi={auto['debug']['center_midi']}, range={auto['debug']['range_midi']}")
+
+                if st.button("⬇️ Bu önerileri seçimlere doldur"):
+                    st.session_state.karar_ui = auto.get("karar_ui") or "—"
+                    st.session_state.merkez_ui = auto.get("merkez_ui") or "—"
+                    st.session_state.alt_ui = auto.get("alt_ui") or "—"
+                    st.session_state.ust_ui = auto.get("ust_ui") or "—"
+                    st.success("Seçimler güncellendi. Aşağıdan 'Olası profilleri öner' diyebilirsiniz.")
 
     st.divider()
-    st.markdown("### Ezgi Özelliklerini Seç (v1)")
+    st.markdown("### Ezgi Özelliklerini Seç (şapka/üst çizgi fark etmez)")
 
     colA, colB = st.columns(2)
     with colA:
-        karar_ui = st.selectbox("Karar perdesi", ALL_PERDELER_UI, index=0)
-        merkez_ui = st.selectbox("Merkez perdesi", ALL_PERDELER_UI, index=0)
-        alt_ui = st.selectbox("Asıl alan alt sınırı", ALL_PERDELER_UI, index=0)
-        ust_ui = st.selectbox("Asıl alan üst sınırı", ALL_PERDELER_UI, index=0)
+        karar_ui = st.selectbox("Karar perdesi", ALL_PERDELER_UI, key="karar_ui")
+        merkez_ui = st.selectbox("Merkez perdesi", ALL_PERDELER_UI, key="merkez_ui")
+        alt_ui = st.selectbox("Asıl alan alt sınırı", ALL_PERDELER_UI, key="alt_ui")
+        ust_ui = st.selectbox("Asıl alan üst sınırı", ALL_PERDELER_UI, key="ust_ui")
 
     with colB:
-        nim_ui = st.multiselect("Nim perdeler", NIM_PERDELER_UI, default=[])
+        nim_ui = st.multiselect("Nim perdeler", NIM_PERDELER_UI, default=st.session_state.nim_ui, key="nim_ui")
 
     if st.button("Olası profilleri öner"):
         results = score_profiles(
