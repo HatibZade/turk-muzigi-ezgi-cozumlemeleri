@@ -355,7 +355,7 @@ with st.sidebar:
 
     }
 
-    labels = [v[0] for v in NIM_NAME_OPTIONS.values()]
+    labels = sorted([v[0] for v in NIM_NAME_OPTIONS.values()], key=lambda x: x.lower())
     selected_labels = st.multiselect("Metinde/analizde adı geçenler (yoksa boş bırak)", labels)
     label_to_key = {v[0]: k for k, v in NIM_NAME_OPTIONS.items()}
     selected_keys = {label_to_key[lbl] for lbl in selected_labels if lbl in label_to_key}
