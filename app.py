@@ -85,13 +85,12 @@ MAKAMS: List[MakamDef] = [
 # Nazari filtre + skor
 # -----------------------------
 def nazari_filter_strict(m: MakamDef, f: Dict[str, str]) -> bool:
-    # girilen alanlar boş değilse birebir eşleşme zorunlu
+    # Sert kriterler: Karar + Kutb (Merkez)
     if f.get("karar") and norm(f["karar"]) != norm(m.karar):
         return False
     if f.get("merkez") and norm(f["merkez"]) != norm(m.kutb):
         return False
-    if f.get("agaz") and norm(f["agaz"]) != norm(m.agaz):
-        return False
+    # Âgâz değişken olabilir: eleme kriteri DEĞİL (sadece skorlar)
     return True
 
 
@@ -318,7 +317,7 @@ with st.sidebar:
     st.subheader("Nazari Seyir")
     karar = st.text_input("Karar")
     merkez = st.text_input("Kutb (Merkez)")
-    agaz = st.text_input("Âgâz (Başlangıç)")
+    agaz = st.text_input("Âgâz (Başlangıç) — opsiyonel")
 
     st.markdown("---")
     st.subheader("Asıl Alan (opsiyonel)")
@@ -412,14 +411,14 @@ with left:
         st.write("**Mikro işaret teşhisi (MusicXML):**", "✅ Var" if micro.get("has_micro") else "❌ Yok")
 
     if used_soft:
-        st.warning("Girdiğin Karar/Âgâz/Kutb üçlüsüne birebir uyan tanım listede bulunamadı. Sadece Karar ile yumuşatılmış arama gösteriliyor.")
+        st.warning("Girdiğin Karar/Kutb (Merkez) eşleşmesine uyan tanım listede bulunamadı. Sadece Karar ile yumuşatılmış arama gösteriliyor.")
 
     st.write("**Aday havuz:**", f"{len(candidates)} / {len(MAKAMS)}")
     st.markdown("---")
 
     if len(ranked) == 0:
         if features.get("agaz") or features.get("merkez"):
-            st.error("Bu Karar/Âgâz/Kutb kombinasyonuna uyan makam tanımı listede yok. (Tanım setini 17 makamına göre güncelle.)")
+            st.error("Bu Karar/Kutb (Merkez) kombinasyonuna uyan makam tanımı listede yok. (Tanım setini 17 makamına göre güncelle.)")
         else:
             st.error("Uygun makam bulunamadı. (Tanım listeni ve yazımını kontrol et.)")
     else:
