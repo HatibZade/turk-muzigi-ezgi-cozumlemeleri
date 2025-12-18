@@ -52,31 +52,30 @@ except Exception:
 class MakamDef:
     name: str
     karar: str
-    guclu: str
-    merkez: str
+    kutb: str   # Merkez
+    agaz: str   # Başlangıç (Âgâz)
     asil_alt: str
     asil_ust: str
     requires_nim: bool
 
-
 MAKAMS: List[MakamDef] = [
-    MakamDef("Rast", "Rast", "Neva", "Rast", "Yegâh", "Gerdâniye", False),
-    MakamDef("Uşşak", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Rast", "Rast", "Rast", "Neva", "Yegâh", "Gerdâniye", False),
+    MakamDef("Uşşak", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", False),
     MakamDef("Hüseynî", "Dügâh", "Hüseynî", "Hüseynî", "Yegâh", "Tiz Hüseynî", False),
-    MakamDef("Nihâvend", "Rast", "Neva", "Rast", "Yegâh", "Tiz Rast", False),
-    MakamDef("Hicaz", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
-    MakamDef("Kürdî", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
-    MakamDef("Nikriz", "Rast", "Neva", "Rast", "Yegâh", "Gerdâniye", True),
-    MakamDef("Sabâ", "Dügâh", "Çargâh", "Dügâh", "Yegâh", "Neva", True),
-    MakamDef("Segâh", "Segâh", "Neva", "Segâh", "Yegâh", "Gerdâniye", False),
-    MakamDef("Hüzzâm", "Segâh", "Neva", "Segâh", "Yegâh", "Gerdâniye", True),
-    MakamDef("Bûselik", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
-    MakamDef("Karcığar", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
-    MakamDef("Bayâtî", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
-    MakamDef("Şehnâz", "Dügâh", "Neva", "Dügâh", "Yegâh", "Tiz Neva", True),
-    MakamDef("Mahûr", "Rast", "Gerdâniye", "Rast", "Yegâh", "Tiz Rast", False),
-    MakamDef("Acemâşîrân", "Acemâşîrân", "Neva", "Acemâşîrân", "Rast", "Tiz Neva", False),
-    MakamDef("Hümâyûn", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Nihâvend", "Rast", "Rast", "Neva", "Yegâh", "Tiz Rast", False),
+    MakamDef("Hicaz", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", True),
+    MakamDef("Kürdî", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", False),
+    MakamDef("Nikriz", "Rast", "Rast", "Neva", "Yegâh", "Gerdâniye", True),
+    MakamDef("Sabâ", "Dügâh", "Dügâh", "Çargâh", "Yegâh", "Neva", True),
+    MakamDef("Segâh", "Segâh", "Segâh", "Neva", "Yegâh", "Gerdâniye", False),
+    MakamDef("Hüzzâm", "Segâh", "Segâh", "Neva", "Yegâh", "Gerdâniye", True),
+    MakamDef("Bûselik", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", False),
+    MakamDef("Karcığar", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", True),
+    MakamDef("Bayâtî", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", True),
+    MakamDef("Şehnâz", "Dügâh", "Dügâh", "Neva", "Yegâh", "Tiz Neva", True),
+    MakamDef("Mahûr", "Rast", "Rast", "Gerdâniye", "Yegâh", "Tiz Rast", False),
+    MakamDef("Acemâşîrân", "Acemâşîrân", "Acemâşîrân", "Neva", "Rast", "Tiz Neva", False),
+    MakamDef("Hümâyûn", "Dügâh", "Dügâh", "Neva", "Yegâh", "Gerdâniye", True),
 ]
 
 
@@ -112,9 +111,9 @@ def score_makam(m: MakamDef, features: Dict[str, str]) -> float:
     score = 0.0
     if norm(features.get("karar", "")) == norm(m.karar):
         score += 3.0
-    if norm(features.get("guclu", "")) == norm(m.guclu):
+    if norm(features.get("agaz", "")) == norm(m.agaz):
         score += 2.5
-    if norm(features.get("merkez", "")) == norm(m.merkez):
+    if norm(features.get("kutb", "")) == norm(m.kutb):
         score += 2.0
     if norm(features.get("alt", "")) == norm(m.asil_alt):
         score += 1.5
@@ -331,8 +330,8 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Ezgi Özellikleri")
     karar = st.text_input("Karar")
-    guclu = st.text_input("Güçlü")
-    merkez = st.text_input("Merkez")
+    agaz = st.text_input("Âgâz (başlangıç)")
+    kutb = st.text_input("Kutb (Merkez)")
     alt = st.text_input("Asıl alan alt sınır")
     ust = st.text_input("Asıl alan üst sınır")
 
@@ -369,7 +368,7 @@ with st.sidebar:
     st.markdown("---")
     topk = st.slider("Kaç sonuç gösterilsin?", 3, 17, 9)
 
-features = {"karar": karar, "guclu": guclu, "merkez": merkez, "alt": alt, "ust": ust}
+features = {"karar": karar, "kutb": kutb, "agaz": agaz, "alt": alt, "ust": ust}
 
 file_kind = None
 score = None
@@ -429,7 +428,7 @@ with left:
         for i, (m, sc) in enumerate(ranked, start=1):
             st.markdown(f"### {i}) {m.name}")
             st.write(f"Skor: **{sc:.2f}**")
-            st.write(f"Karar: {m.karar} — Güçlü: {m.guclu} — Merkez: {m.merkez}")
+            st.write(f"Karar: {m.karar} — Âgâz: {m.agaz} — Kutb: {m.kutb}")
             st.write(f"Asıl alan: {m.asil_alt} → {m.asil_ust}")
             st.write(f"Nim gerektirir mi?: {'Evet' if m.requires_nim else 'Hayır'}")
             st.markdown("---")
