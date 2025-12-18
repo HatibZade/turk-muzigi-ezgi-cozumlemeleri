@@ -2,37 +2,155 @@
   kullanilan_perdeler:
     tam: Tüm tam perdeler
   nazari_seyir:
-    agaz:
-    - rast
-    kutb:
-    - rast
-    karar:
-    - rast
+    agaz: [rast]
+    kutb: [rast]
+    karar: [rast]
   asil_seyir_alani:
     alt: ırâk
     ust: segâh
   susleyen_perdeler:
-  - nevâ
-  - hüseynî
+    - nevâ
+    - hüseynî
   lahni_seyir:
     tasarruflar:
-    - rast–nevâ dolaşımı
+      - rast–nevâ dolaşımı
+
 - name: Uşşak
   kullanilan_perdeler:
     tam: Tüm tam perdeler
   nazari_seyir:
-    agaz:
-    - dügâh
-    kutb:
-    - dügâh
-    karar:
-    - dügâh
+    agaz: [dügâh]
+    kutb: [dügâh]
+    karar: [dügâh]
   asil_seyir_alani:
     alt: rast
     ust: çargâh
   susleyen_perdeler:
-  - nevâ
-  - hüseynî
+    - nevâ
+    - hüseynî
   lahni_seyir:
     tasarruflar:
-    - nevâ kalışları
+      - nevâ perdesinde kalışlar
+      - hüseynî merkezli nağmeler
+
+- name: Hüseynî
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+  nazari_seyir:
+    agaz: [hüseynî]
+    kutb: [hüseynî]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: hüseynî
+  susleyen_perdeler:
+    - evc
+    - acem
+  lahni_seyir:
+    tasarruflar:
+      - hüseynî merkezli seyir
+      - evc–acem geçişleri
+
+- name: Hicaz
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+    nim:
+      - hicaz
+      - dik kürdî
+  nazari_seyir:
+    agaz: [nevâ]
+    kutb: [nevâ]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: nevâ
+  susleyen_perdeler:
+    - zengûle
+    - rast
+    - hüseynî
+  lahni_seyir:
+    tasarruflar:
+      - hicaz çeşnili inişler
+      - dügâh kararları
+
+- name: Nevâ
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+  nazari_seyir:
+    agaz: [nevâ]
+    kutb: [nevâ]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: nevâ
+  susleyen_perdeler:
+    - rast
+    - hüseynî
+  lahni_seyir:
+    tasarruflar:
+      - nevâ merkezli kalışlar
+
+- name: Segâh
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+    nim:
+      - kürdî
+  nazari_seyir:
+    agaz: [segâh]
+    kutb: [segâh]
+    karar: [segâh]
+  asil_seyir_alani:
+    alt: kürdî
+    ust: nevâ
+  susleyen_perdeler:
+    - hüseynî
+    - evc
+  lahni_seyir:
+    tasarruflar:
+      - segâh perdesinde kalışlar
+
+- name: Irak
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+  nazari_seyir:
+    agaz: [dügâh]
+    kutb: [dügâh]
+    karar: [ırâk]
+  asil_seyir_alani:
+    alt: ırâk
+    ust: dügâh
+  susleyen_perdeler:
+    - aşîran
+    - segâh
+  lahni_seyir:
+    tasarruflar:
+      - ırâk merkezli inişler
+
+- name: Kürdî
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+    nim:
+      - kürdî
+  nazari_seyir:
+    agaz: [hüseynî]
+    kutb: [hüseynî]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: hüseynî
+  susleyen_perdeler:
+    - segâh
+  lahni_seyir:
+    tasarruflar:
+      - kürdî–segâh geçişleri
+
+- name: Nihâvend
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+    nim:
+      - kürdî
+  nazari_seyir:
+    agaz: [nevâ]
+    kutb: [nevâ]
+    karar: [rast]
+  asil_seyir_alani:
