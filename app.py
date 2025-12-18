@@ -20,7 +20,9 @@ if not isinstance(makamlar, list):
     st.stop()
 
 names = [m.get("name","(isimsiz)") for m in makamlar]
-secili = st.selectbox("Ezgi için olası makam profili", names)
+with tab1:
+    secili = st.selectbox("Ezgi için olası makam profili", names)
+    ...
 
 makam = next((m for m in makamlar if m.get("name")==secili), None)
 if makam is None:
@@ -88,6 +90,24 @@ with col2:
         st.markdown("**Lahnî Seyir Gözlemleri**")
         for t in ts:
             st.markdown(f"- {t}")
+            with tab2:
+    st.subheader("🎼 Nota Yükleme (Ezgi Çözümleme)")
+
+    st.info(
+        "Bu bölümde yüklediğiniz nota üzerinden "
+        "karar perdesi, merkez ve seyir alanı çıkarılarak "
+        "olası ezgi profilleri önerilecektir."
+    )
+
+    uploaded = st.file_uploader(
+        "Nota dosyasını yükleyin",
+        type=["pdf", "png", "jpg", "musicxml", "xml"]
+    )
+
+    if uploaded:
+        st.success(f"Yüklenen dosya: {uploaded.name}")
+        st.caption("Analiz motoru bir sonraki adımda eklenecek.")
+
 
 st.divider()
 st.caption("Bu uygulama ezgiden hareketle çözümleme yapmayı hedefler; makam adları çıkarımsaldır.")
