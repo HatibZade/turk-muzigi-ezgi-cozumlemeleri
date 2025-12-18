@@ -1,7 +1,6 @@
 import streamlit as st
 import yaml
 from pathlib import Path
-import base64
 import unicodedata
 
 # ------------------ SAYFA AYARLARI ------------------
@@ -13,21 +12,12 @@ DATA_PATH = Path("data") / "makamlar.yaml"
 
 # ------------------ NORMALİZASYON ------------------
 def normalize_perde(s: str) -> str:
-    """
-    Şapka (â î û), macron (ā ī ū) ve Türkçe karakterleri normalize eder.
-    Örn: 'Hicâz' / 'hicāz' / 'hicaz' -> 'hicaz'
-         'Hüseynî' -> 'huseyni'
-         'Segâh' -> 'segah'
-    """
     if not s:
         return ""
     s = str(s).strip().lower()
-
-    # Unicode ayrıştır (diakritik işaretleri ayıkla)
     s = unicodedata.normalize("NFD", s)
     s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
 
-    # Türkçe harf sadeleştirme
     tr_map = {
         "ş": "s", "ğ": "g", "ı": "i", "ö": "o", "ü": "u", "ç": "c",
         "â": "a", "î": "i", "û": "u",
@@ -36,7 +26,6 @@ def normalize_perde(s: str) -> str:
     for k, v in tr_map.items():
         s = s.replace(k, v)
 
-    # Çoklu boşluk temizle
     s = " ".join(s.split())
     return s
 
@@ -47,27 +36,8 @@ def normalize_list(values):
         return [normalize_perde(v) for v in values if v is not None]
     return [normalize_perde(values)]
 
-# ------------------ YARDIMCILAR ------------------
-def show_pdf(file_bytes: bytes):
-    b64 = base64.b64encode(file_bytes).decode("utf-8")
-    html = f"""
-    <iframe src="data:application/pdf;base64,{b64}"
-            width="100%" height="750" style="border:none;"></iframe>
-    """
-    st.markdown(html, unsafe_allow_html=True)
-
-def show_image(file_bytes: bytes):
-    st.image(file_bytes, use_container_width=True)
-
+# ------------------ PUANLAMA ------------------
 def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_list=None):
-    """
-    Normalizasyonlu puanlama:
-    - Karar eşleşmesi: +3
-    - Merkez (kutb) eşleşmesi: +2
-    - Alan alt eşleşmesi: +1
-    - Alan üst eşleşmesi: +1
-    - Nim kesişimi: +2 (en az 1 ortak varsa)
-    """
     nim_list = nim_list or []
 
     karar_n = normalize_perde(karar) if karar else ""
@@ -92,17 +62,14 @@ def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_li
         prof_ust_n = normalize_perde(asa.get("ust", ""))
         prof_nim_n = normalize_list(kp.get("nim"))
 
-        # Karar
         if karar_n and karar_n in prof_karar_n:
             score += 3
             reasons.append(f"Karar eşleşti: {karar}")
 
-        # Merkez
         if merkez_n and merkez_n in prof_kutb_n:
             score += 2
             reasons.append(f"Merkez eşleşti: {merkez}")
 
-        # Alan alt/üst
         if alt_n and prof_alt_n and alt_n == prof_alt_n:
             score += 1
             reasons.append(f"Asıl alan alt sınır eşleşti: {alt}")
@@ -111,12 +78,10 @@ def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_li
             score += 1
             reasons.append(f"Asıl alan üst sınır eşleşti: {ust}")
 
-        # Nim kesişimi
         if nim_n and prof_nim_n:
             inter = sorted(set(nim_n).intersection(set(prof_nim_n)))
             if inter:
                 score += 2
-                # Kullanıcıya okunabilir olsun diye orijinal nim isimleriyle değil, seçtikleriyle gösteriyoruz
                 reasons.append("Nim kesişimi var")
 
         if score > 0:
@@ -125,7 +90,7 @@ def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_li
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored[:7]
 
-# ------------------ VERİYİ OKU ------------------
+# ------------------ VERİ ------------------
 if not DATA_PATH.exists():
     st.error("Veri dosyası bulunamadı: data/makamlar.yaml")
     st.stop()
@@ -139,14 +104,11 @@ if not isinstance(profiles, list) or not profiles:
 
 names = [m.get("name", "(isimsiz)") for m in profiles]
 
-# ------------------ PERDE LİSTELERİ (GÖRÜNÜR HAL) ------------------
-# Kullanıcıya akademik (şapkalı/üst çizgili) yazımı gösterebiliriz.
+# ------------------ UI LISTELER ------------------
 TAM_PERDELER_UI = [
     "yegâh", "aşîrān", "ırâk", "rast", "dügâh", "segâh", "çargâh", "nevâ", "hüseynî",
     "evc", "gerdaniyye", "muhayyer", "tîz segâh", "tîz çargâh", "tîz nevâ"
 ]
-
-# Nim perdeler: farklı yazım gelse de normalize edilecek.
 NIM_PERDELER_UI = [
     "nerm bayatî", "nerm hisar", "pest aşîrān",
     "acem-aşîrān", "dik acem-aşîrān",
@@ -161,13 +123,12 @@ NIM_PERDELER_UI = [
     "tîz şurî", "şehnāz", "pest muhayyer",
     "sünbüle", "dik sünbüle"
 ]
-
 ALL_PERDELER_UI = ["—"] + TAM_PERDELER_UI
 
-# ------------------ SEKME YAPISI ------------------
+# ------------------ SEKME ------------------
 tab1, tab2 = st.tabs(["📘 Ezgi Profilleri", "🎼 Nota Yükle"])
 
-# ------------------ TAB 1: PROFİLLER ------------------
+# ------------------ TAB 1 ------------------
 with tab1:
     secili = st.selectbox("Ezgi için olası profil", names)
     prof = next((m for m in profiles if m.get("name") == secili), None)
@@ -192,16 +153,9 @@ with tab1:
         st.markdown("**Nim:** " + (", ".join(nim) if nim else "—"))
 
         st.markdown("### Nazari Seyir")
-        agaz = ns.get("agaz", [])
-        kutb = ns.get("kutb", [])
-        karar = ns.get("karar", [])
-        if not isinstance(agaz, list): agaz = [agaz] if agaz else []
-        if not isinstance(kutb, list): kutb = [kutb] if kutb else []
-        if not isinstance(karar, list): karar = [karar] if karar else []
-
-        st.markdown(f"- **Âgâz:** {', '.join(agaz) or '—'}")
-        st.markdown(f"- **Merkez:** {', '.join(kutb) or '—'}")
-        st.markdown(f"- **Karar:** {', '.join(karar) or '—'}")
+        st.markdown(f"- **Âgâz:** {', '.join((ns.get('agaz') or [])) if isinstance(ns.get('agaz'), list) else (ns.get('agaz') or '—')}")
+        st.markdown(f"- **Merkez:** {', '.join((ns.get('kutb') or [])) if isinstance(ns.get('kutb'), list) else (ns.get('kutb') or '—')}")
+        st.markdown(f"- **Karar:** {', '.join((ns.get('karar') or [])) if isinstance(ns.get('karar'), list) else (ns.get('karar') or '—')}")
 
         st.markdown("### Asıl Seyir Alanı")
         st.markdown(f"**{asa.get('alt','—')} – {asa.get('ust','—')}**")
@@ -224,54 +178,45 @@ with tab1:
 
     with col2:
         st.subheader("Kısa Özet")
-        st.info("Bu panel, seçilen profilin hızlı özetidir. Nota analizinde, alttaki sekme kullanılır.")
+        st.info("Seçilen profilin hızlı özeti. Nota yükleme ve olasılık için diğer sekmeyi kullan.")
 
         ns = prof.get("nazari_seyir", {}) or {}
         asa = prof.get("asil_seyir_alani", {}) or {}
         kp = prof.get("kullanilan_perdeler", {}) or {}
-        nim = kp.get("nim", [])
-        if not isinstance(nim, list):
-            nim = [nim] if nim else []
 
         st.markdown(
-            f"**Nazari Seyir:** Âgâz **{', '.join(normalize_list(ns.get('agaz'))) or '—'}**, "
-            f"Merkez **{', '.join(normalize_list(ns.get('kutb'))) or '—'}**, "
-            f"Karar **{', '.join(normalize_list(ns.get('karar'))) or '—'}**"
+            f"**Normalize edilmiş (eşleşme için):** "
+            f"Karar={', '.join(normalize_list(ns.get('karar'))) or '—'}, "
+            f"Merkez={', '.join(normalize_list(ns.get('kutb'))) or '—'}, "
+            f"Alan={normalize_perde(asa.get('alt','—'))}–{normalize_perde(asa.get('ust','—'))}"
         )
-        st.markdown(f"**Asıl Seyir Alanı (normalize):** **{normalize_perde(asa.get('alt','—'))} – {normalize_perde(asa.get('ust','—'))}**")
-        st.markdown("**Nim Perdeler (normalize):** " + (", ".join([normalize_perde(x) for x in nim]) if nim else "—"))
+        st.caption("Not: Şapkalı/üst çizgili/düz yazımlar otomatik normalize edilir.")
 
-# ------------------ TAB 2: NOTA YÜKLE ------------------
+# ------------------ TAB 2 ------------------
 with tab2:
     st.subheader("🎼 Nota Yükleme ve Olası Profil Önerisi")
 
-    st.caption(
-        "PDF/PNG/JPG yüklediğinizde sistem notayı otomatik okumaz (OMR henüz yok). "
-        "Bu yüzden aşağıdan karar/merkez/alan/nim perdeleri seçerek öneri alırsınız. "
-        "Seçimleriniz şapkalı/üst çizgili/düz yazım fark etmeksizin normalize edilir."
+    st.warning(
+        "PDF notadan otomatik perde/seyir çıkarımı (OMR) bu sürümde yok. "
+        "PDF'yi yükleyip aşağıdan karar/merkez/alan/nim seçerek olasılık alırsınız."
     )
 
-    uploaded = st.file_uploader(
-        "Nota dosyasını yükleyin (PDF/PNG/JPG)",
-        type=["pdf", "png", "jpg", "jpeg"]
-    )
-
+    uploaded = st.file_uploader("PDF nota yükle", type=["pdf"])
     if uploaded:
-        file_bytes = uploaded.getvalue()
-        ext = uploaded.name.split(".")[-1].lower()
-
-        st.success(f"Yüklenen dosya: {uploaded.name}")
-        st.markdown("### Önizleme")
-        if ext == "pdf":
-            show_pdf(file_bytes)
-        else:
-            show_image(file_bytes)
+        st.success(f"PDF yüklendi: {uploaded.name}")
+        # Google/iframe görüntüleme yok: sadece indirme
+        st.download_button(
+            "📥 Yüklenen PDF'yi indir",
+            data=uploaded.getvalue(),
+            file_name=uploaded.name,
+            mime="application/pdf"
+        )
+        st.caption("Görüntüleme bazı ortamlarda engellenebildiği için önizleme kaldırıldı.")
 
     st.divider()
     st.markdown("### Ezgi Özelliklerini Seç (v1)")
 
     colA, colB = st.columns(2)
-
     with colA:
         karar_ui = st.selectbox("Karar perdesi", ALL_PERDELER_UI, index=0)
         merkez_ui = st.selectbox("Merkez perdesi", ALL_PERDELER_UI, index=0)
@@ -292,7 +237,7 @@ with tab2:
         )
 
         if not results:
-            st.warning("Eşleşme bulunamadı. Birkaç alan daha seçmeyi deneyin (özellikle karar/merkez).")
+            st.warning("Eşleşme bulunamadı. Özellikle karar ve merkez seçmeyi deneyin.")
         else:
             st.success("En olası profiller:")
             for sc, name, reasons in results:
