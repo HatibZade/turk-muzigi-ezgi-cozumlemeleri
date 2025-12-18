@@ -31,7 +31,40 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.subheader("Tanım (Profil)")
-    st.json(makam, expanded=True)
+
+    kp = makam.get("kullanilan_perdeler", {})
+    tam = kp.get("tam", "—")
+    nim = kp.get("nim", [])
+    if isinstance(nim, str):
+        nim = [nim]
+
+    st.markdown("### Kullanılan Perdeler")
+    st.markdown(f"**Tam:** {tam}")
+    st.markdown("**Nim:** " + (", ".join(nim) if nim else "—"))
+
+    st.markdown("### Nazari Seyir")
+    ns = makam.get("nazari_seyir", {})
+    st.markdown(f"- **Âgâz:** {', '.join(ns.get('agaz', [])) or '—'}")
+    st.markdown(f"- **Merkez:** {', '.join(ns.get('kutb', [])) or '—'}")
+    st.markdown(f"- **Karar:** {', '.join(ns.get('karar', [])) or '—'}")
+
+    st.markdown("### Asıl Seyir Alanı")
+    asa = makam.get("asil_seyir_alani", {})
+    st.markdown(f"**{asa.get('alt','—')} – {asa.get('ust','—')}**")
+
+    st.markdown("### Süsleyen Perdeler")
+    sus = makam.get("susleyen_perdeler", [])
+    st.markdown(", ".join(sus) if sus else "—")
+
+    st.markdown("### Lahnî Seyir Gözlemleri")
+    ts = makam.get("lahni_seyir", {}).get("tasarruflar", [])
+    if ts:
+        for t in ts:
+            st.markdown(f"- {t}")
+    else:
+        st.markdown("—")
+
+
 
 with col2:
     st.subheader("Ezgiye Göre Özet")
