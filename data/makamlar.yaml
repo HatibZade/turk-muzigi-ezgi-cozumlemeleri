@@ -1,6 +1,6 @@
 - name: Rast
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
+    tam: TUM_TAM_PERDE_SETI
   nazari_seyir:
     agaz: [rast]
     kutb: [rast]
@@ -8,16 +8,16 @@
   asil_seyir_alani:
     alt: ırâk
     ust: segâh
-  susleyen_perdeler:
-    - nevâ
-    - hüseynî
+  susleyen_perdeler: [aşîrān, yegâh, çargâh, nevâ, hüseynî, acem, evc, gerdaniyye]
   lahni_seyir:
     tasarruflar:
-      - rast–nevâ dolaşımı
+      - rast-nevâ arası dolaşım
+      - evc-acem perde değişimleri
+      - segâhda segâhlı kalış
 
-- name: Uşşak
+- name: Uşşak (Dügâh-ı Kadim)
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
+    tam: TUM_TAM_PERDE_SETI
   nazari_seyir:
     agaz: [dügâh]
     kutb: [dügâh]
@@ -25,17 +25,16 @@
   asil_seyir_alani:
     alt: rast
     ust: çargâh
-  susleyen_perdeler:
-    - nevâ
-    - hüseynî
+  susleyen_perdeler: [ırâk, aşîrān, nevâ, hüseynî, acem, gerdaniyye, muhayyer]
   lahni_seyir:
     tasarruflar:
-      - nevâ perdesinde kalışlar
-      - hüseynî merkezli nağmeler
+      - nevâ ve çargâh perdesinde kalışlar
+      - acem kullanımı; nadiren (özellikle Dügâh-ı Kadimde) evc kullanımı
+      - bazı türkülerde dügâh perdesinden başlayan seyir ve hüseynî perdesinde kalışlar
 
 - name: Hüseynî
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
+    tam: TUM_TAM_PERDE_SETI
   nazari_seyir:
     agaz: [hüseynî]
     kutb: [hüseynî]
@@ -43,20 +42,17 @@
   asil_seyir_alani:
     alt: dügâh
     ust: hüseynî
-  susleyen_perdeler:
-    - evc
-    - acem
+  susleyen_perdeler: [evc, acem, gerdaniyye, muhayyer, rast]
   lahni_seyir:
     tasarruflar:
-      - hüseynî merkezli seyir
-      - evc–acem geçişleri
+      - evc-acem değişimleri
+      - seyre dügâhdan başlama
+      - seyre gerdaniyyeden başlama
 
 - name: Hicaz
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
-    nim:
-      - hicaz
-      - dik kürdî
+    tam: yegâh, aşîrān, ırâk, rast, dügâh, nevâ, hüseynî, evc, gerdaniyye, muhayyer
+    nim: [dik kürdî, hicâz]
   nazari_seyir:
     agaz: [nevâ]
     kutb: [nevâ]
@@ -64,18 +60,16 @@
   asil_seyir_alani:
     alt: dügâh
     ust: nevâ
-  susleyen_perdeler:
-    - zengûle
-    - rast
-    - hüseynî
+  susleyen_perdeler: [rast, zengûle, ırâk, aşîrān, yegâh, hüseynî, acem, evc, gerdaniyye, muhayyer]
   lahni_seyir:
     tasarruflar:
-      - hicaz çeşnili inişler
-      - dügâh kararları
+      - rast veya zengûle perdesiyle dügâhda kalış
+      - evc-acem değişimleri
+      - seyre dügâh perdesinden başlama
 
 - name: Nevâ
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
+    tam: TUM_TAM_PERDE_SETI
   nazari_seyir:
     agaz: [nevâ]
     kutb: [nevâ]
@@ -83,18 +77,16 @@
   asil_seyir_alani:
     alt: dügâh
     ust: nevâ
-  susleyen_perdeler:
-    - rast
-    - hüseynî
+  susleyen_perdeler: [ırâk, rast, hüseynî, evc, acem, gerdaniyye, muhayyer]
   lahni_seyir:
     tasarruflar:
-      - nevâ merkezli kalışlar
+      - bazen dügâh perdesinden seyre başlama
+      - evc yerine sürekli acem perdesi kullanımı
 
 - name: Segâh
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
-    nim:
-      - kürdî
+    tam: TUM_TAM_PERDE_SETI
+    nim: [kürdî]
   nazari_seyir:
     agaz: [segâh]
     kutb: [segâh]
@@ -102,16 +94,16 @@
   asil_seyir_alani:
     alt: kürdî
     ust: nevâ
-  susleyen_perdeler:
-    - hüseynî
-    - evc
+  susleyen_perdeler: [rast, dügâh, hüseynî, evc, acem, gerdaniyye, muhayyer]
   lahni_seyir:
     tasarruflar:
-      - segâh perdesinde kalışlar
+      - nevâdan seyre başlama
+      - evc-acem değişimi
+      - bazı türkülerde hüseynî perdesinde kalışlar
 
 - name: Irak
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
+    tam: TUM_TAM_PERDE_SETI
   nazari_seyir:
     agaz: [dügâh]
     kutb: [dügâh]
@@ -119,18 +111,16 @@
   asil_seyir_alani:
     alt: ırâk
     ust: dügâh
-  susleyen_perdeler:
-    - aşîran
-    - segâh
+  susleyen_perdeler: [yegâh, aşîrān, acem-aşîrān, segâh, çargâh, nevâ]
   lahni_seyir:
     tasarruflar:
-      - ırâk merkezli inişler
+      - bazen ırâk perdesinden seyre başlanması
+      - bazen nevâ perdesinden seyre başlanması
 
 - name: Kürdî
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
-    nim:
-      - kürdî
+    tam: TUM_TAM_PERDE_SETI
+    nim: [kürdî]
   nazari_seyir:
     agaz: [hüseynî]
     kutb: [hüseynî]
@@ -138,19 +128,160 @@
   asil_seyir_alani:
     alt: dügâh
     ust: hüseynî
-  susleyen_perdeler:
-    - segâh
+  susleyen_perdeler: [rast, segâh, acem, gerdaniyye, muhayyer]
   lahni_seyir:
     tasarruflar:
-      - kürdî–segâh geçişleri
+      - bazen dügâhdan seyre girilmesi
+      - nevâda kalışlar
+      - seyirde segâh-kürdî değişimli kullanımı
 
-- name: Nihâvend
+- name: Nihāvend
   kullanilan_perdeler:
-    tam: Tüm tam perdeler
-    nim:
-      - kürdî
+    tam: TUM_TAM_PERDE_SETI (segâh hariç)
+    nim: [kürdî]
   nazari_seyir:
     agaz: [nevâ]
     kutb: [nevâ]
     karar: [rast]
   asil_seyir_alani:
+    alt: rast
+    ust: nevâ
+  susleyen_perdeler: [geveşt, bayatî (nim hisar), acem, evc, gerdaniyye]
+  lahni_seyir:
+    tasarruflar:
+      - bazen seyre rast perdesinden başlanır
+      - nevâ perdesinde Hicaz geçkisi yapılır
+
+- name: Sabā
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI (nevâ hariç)
+    nim: [dik sabâ (hicâz)]
+  nazari_seyir:
+    agaz: [çargâh]
+    kutb: [çargâh]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: dik sabâ (hicâz)
+  susleyen_perdeler: [rast, hüseynî, acem, gerdaniyye, muhayyer, tîz dik şurî (şehnāz)]
+  lahni_seyir:
+    tasarruflar:
+      - seyre dügâhdan girilebilir
+      - tiz genişlemelerde çoğunlukla tîz dik şurî (şehnāz) kullanılır
+
+- name: Buselik
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI (segâh hariç)
+    nim: [buselik]
+  nazari_seyir:
+    agaz: [hüseynî]
+    kutb: [hüseynî]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: hüseynî
+  susleyen_perdeler: [zengûle, rast, acem, evc, gerdaniyye, muhayyer]
+  lahni_seyir:
+    tasarruflar:
+      - bazı eserlerde çargâh perdesinde, hüseynî kadar önemli kalışlar
+      - içinde Hüseynî nağmeleri
+      - evc yerine daha çok acem perdesi kullanımı
+
+- name: Çargâh
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI
+  nazari_seyir:
+    agaz: [çargâh]
+    kutb: [çargâh]
+    karar: [çargâh]
+  asil_seyir_alani:
+    alt: segâh
+    ust: hüseynî
+  susleyen_perdeler: [rast, dügâh, acem, evc, gerdaniyye, muhayyer]
+  lahni_seyir:
+    tasarruflar:
+      - çoğu türkünde hüseynî perdesi merkez alınır
+      - bazen gerdaniyye perdesinde kalışlar yapılır
+      - evc yerine daha çok acem perdesi tercih edilir
+
+- name: Nişābūr (buselik)
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI (segâh ve evc hariç)
+    nim: [hicâz, "nişābūr (buselik)", acem]
+  nazari_seyir:
+    agaz: [nevâ]
+    kutb: [nevâ]
+    karar: [buselik]
+  asil_seyir_alani:
+    alt: buselik
+    ust: nevâ
+  susleyen_perdeler: [dügâh, hüseynî, acem, gerdaniyye, muhayyer]
+  lahni_seyir:
+    tasarruflar:
+      - nevâ perdesi merkezli seyir ve buselik perdesine inişler
+
+- name: Sûz-i Dilârā
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI
+    nim: [geveşt, buselik]
+  nazari_seyir:
+    agaz: [rast]
+    kutb: [rast]
+    karar: [rast]
+  asil_seyir_alani:
+    alt: geveşt
+    ust: çargâh
+  susleyen_perdeler: [yegâh, aşîrān, ırâk, nevâ, hüseynî, evc, acem, gerdaniyye]
+  lahni_seyir:
+    tasarruflar:
+      - rast merkezli başlar
+      - daha sonra hüseynî perdesinde kalışlar yapar
+
+- name: Aşîrān
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI
+  nazari_seyir:
+    agaz: [dügâh]
+    kutb: [dügâh]
+    karar: [aşîrān]
+  asil_seyir_alani:
+    alt: aşîrān
+    ust: dügâh
+  susleyen_perdeler: [yegâh, segâh, çargâh, nevâ]
+  lahni_seyir:
+    tasarruflar:
+      - dügâh merkezli seyir
+
+- name: Nikriz
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI (segâh ve çargâh hariç)
+    nim: [dik kürdî, hicâz]
+  nazari_seyir:
+    agaz: [nevâ]
+    kutb: [nevâ]
+    karar: [rast]
+  asil_seyir_alani:
+    alt: rast
+    ust: nevâ
+  susleyen_perdeler: [ırâk, hüseynî, evc, acem, gerdaniyye]
+  lahni_seyir:
+    tasarruflar:
+      - nevâ merkezli seyir
+
+- name: Acem
+  kullanilan_perdeler:
+    tam: TUM_TAM_PERDE_SETI (evc hariç)
+    nim: [acem]
+  nazari_seyir:
+    agaz: [acem]
+    kutb: [acem]
+    karar: [dügâh]
+  asil_seyir_alani:
+    alt: dügâh
+    ust: acem
+  susleyen_perdeler: [rast, gerdaniyye, muhayyer, sünbüle]
+  lahni_seyir:
+    tasarruflar:
+      - acem merkezli seyir
+      - nevâ perdesinde ve nadir olarak çargâh perdesinde kalışlar
+      - tize genişlemelerde sünbüle perdesi kullanımı
