@@ -1,0 +1,38 @@
+- name: Rast
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+  nazari_seyir:
+    agaz:
+    - rast
+    kutb:
+    - rast
+    karar:
+    - rast
+  asil_seyir_alani:
+    alt: ırâk
+    ust: segâh
+  susleyen_perdeler:
+  - nevâ
+  - hüseynî
+  lahni_seyir:
+    tasarruflar:
+    - rast–nevâ dolaşımı
+- name: Uşşak
+  kullanilan_perdeler:
+    tam: Tüm tam perdeler
+  nazari_seyir:
+    agaz:
+    - dügâh
+    kutb:
+    - dügâh
+    karar:
+    - dügâh
+  asil_seyir_alani:
+    alt: rast
+    ust: çargâh
+  susleyen_perdeler:
+  - nevâ
+  - hüseynî
+  lahni_seyir:
+    tasarruflar:
+    - nevâ kalışları
