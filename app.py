@@ -67,6 +67,7 @@ class MakamDef:
 # Buradaki en önemli şey: Uşşak tanımı "dügah, dügah, dügah" olmalıdır (senin dediğin gibi).
 MAKAMS: List[MakamDef] = [
     MakamDef("Uşşak", "Dügâh", "Dügâh", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Nevâ", "Dügâh", "Nevâ", "Nevâ", "Yegâh", "Tiz Nevâ", False),
     MakamDef("Rast", "Rast", "Rast", "Rast", "Yegâh", "Gerdâniye", False),
     MakamDef("Hüseynî", "Dügâh", "Hüseynî", "Dügâh", "Yegâh", "Tiz Hüseynî", False),
     MakamDef("Nihâvend", "Rast", "Rast", "Rast", "Yegâh", "Tiz Rast", False),
@@ -386,7 +387,8 @@ candidates0 = filter_makams_by_nim(MAKAMS, has_nim_for_filter)
 # 2) Nazari filtre: önce sert, 0 ise yumuşak
 candidates = [m for m in candidates0 if nazari_filter_strict(m, features)]
 used_soft = False
-if len(candidates) == 0:
+# Yumuşatma: sadece Karar girilmişse (Âgâz/Kutb boşsa) devreye girsin.
+if len(candidates) == 0 and not (features.get("agaz") or features.get("merkez")):
     candidates = [m for m in candidates0 if nazari_filter_soft(m, features)]
     used_soft = True
 
@@ -409,14 +411,17 @@ with left:
     if file_kind == "musicxml" and not file_error:
         st.write("**Mikro işaret teşhisi (MusicXML):**", "✅ Var" if micro.get("has_micro") else "❌ Yok")
 
-    if used_soft and (features.get("agaz") or features.get("merkez")):
+    if used_soft:
         st.warning("Girdiğin Karar/Âgâz/Kutb üçlüsüne birebir uyan tanım listede bulunamadı. Sadece Karar ile yumuşatılmış arama gösteriliyor.")
 
     st.write("**Aday havuz:**", f"{len(candidates)} / {len(MAKAMS)}")
     st.markdown("---")
 
     if len(ranked) == 0:
-        st.error("Uygun makam bulunamadı. (Tanım listeni ve yazımını kontrol et.)")
+        if features.get("agaz") or features.get("merkez"):
+            st.error("Bu Karar/Âgâz/Kutb kombinasyonuna uyan makam tanımı listede yok. (Tanım setini 17 makamına göre güncelle.)")
+        else:
+            st.error("Uygun makam bulunamadı. (Tanım listeni ve yazımını kontrol et.)")
     else:
         for i, (m, sc) in enumerate(ranked, start=1):
             st.markdown(f"### {i}) {m.name}")
