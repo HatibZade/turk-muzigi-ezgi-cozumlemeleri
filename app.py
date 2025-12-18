@@ -2,17 +2,15 @@ import streamlit as st
 import yaml
 from pathlib import Path
 import base64
-import xml.etree.ElementTree as ET
-from collections import Counter
 
-# ------------------ AYARLAR ------------------
+# ------------------ SAYFA AYARLARI ------------------
 st.set_page_config(page_title="Türk Müziği Ezgi Çözümlemeleri", layout="wide")
 st.title("🎼 Türk Müziği Ezgi Çözümlemeleri")
 st.caption("Emrah Hatipoğlu")
 
 DATA_PATH = Path("data") / "makamlar.yaml"
 
-# ------------------ YARDIMCI FONKSİYONLAR ------------------
+# ------------------ YARDIMCILAR ------------------
 def show_pdf(file_bytes: bytes):
     b64 = base64.b64encode(file_bytes).decode("utf-8")
     html = f"""
@@ -24,93 +22,101 @@ def show_pdf(file_bytes: bytes):
 def show_image(file_bytes: bytes):
     st.image(file_bytes, use_container_width=True)
 
-def extract_features_from_musicxml(file_bytes: bytes):
-    root = ET.fromstring(file_bytes)
-    pitches = []
+def as_list(x):
+    if x is None:
+        return []
+    if isinstance(x, list):
+        return x
+    return [x]
 
-    for note in root.findall(".//note"):
-        if note.find("rest") is not None:
-            continue
-        pitch = note.find("pitch")
-        if pitch is None:
-            continue
-        step = pitch.findtext("step")
-        octave = pitch.findtext("octave")
-        alter = pitch.findtext("alter") or "0"
-        if step and octave:
-            pitches.append((step, int(octave), int(float(alter))))
-
-    if not pitches:
-        return {}
-
-    last_pitch = pitches[-1]
-    center_pitch = Counter(pitches).most_common(1)[0][0]
-
-    step_to_semi = {"C":0,"D":2,"E":4,"F":5,"G":7,"A":9,"B":11}
-    def to_midi(p):
-        s, o, a = p
-        return (o + 1) * 12 + step_to_semi.get(s, 0) + a
-
-    midis = [to_midi(p) for p in pitches]
-
-    return {
-        "karar": last_pitch,
-        "merkez": center_pitch,
-        "range": (min(midis), max(midis))
-    }
-
-def score_profiles(makamlar, karar=None, merkez=None, alt=None, ust=None, nim_list=None):
+def score_profiles(profiles, karar=None, merkez=None, alt=None, ust=None, nim_list=None):
+    """
+    Basit puanlama:
+    - Karar eşleşmesi: +3
+    - Merkez (kutb) eşleşmesi: +2
+    - Alan alt eşleşmesi: +1
+    - Alan üst eşleşmesi: +1
+    - Nim perdeler kesişimi: +2 (en az 1 ortak varsa)
+    """
     nim_list = nim_list or []
-    results = []
+    scored = []
 
-    for m in makamlar:
+    for m in profiles:
         score = 0
         reasons = []
 
-        ns = m.get("nazari_seyir", {})
-        asa = m.get("asil_seyir_alani", {})
-        kp = m.get("kullanilan_perdeler", {})
-        prof_nim = kp.get("nim", [])
-        if isinstance(prof_nim, str):
-            prof_nim = [prof_nim]
+        ns = m.get("nazari_seyir", {}) or {}
+        asa = m.get("asil_seyir_alani", {}) or {}
+        kp = m.get("kullanilan_perdeler", {}) or {}
 
-        if karar and karar in (ns.get("karar") or []):
+        prof_karar = as_list(ns.get("karar"))
+        prof_kutb = as_list(ns.get("kutb"))
+        prof_nim = as_list(kp.get("nim"))
+
+        if karar and karar in prof_karar:
             score += 3
-            reasons.append(f"Karar uyuşuyor: {karar}")
+            reasons.append(f"Karar eşleşti: {karar}")
 
-        if merkez and merkez in (ns.get("kutb") or []):
+        if merkez and merkez in prof_kutb:
             score += 2
-            reasons.append(f"Merkez uyuşuyor: {merkez}")
+            reasons.append(f"Merkez eşleşti: {merkez}")
 
         if alt and asa.get("alt") == alt:
             score += 1
-            reasons.append(f"Alt sınır: {alt}")
+            reasons.append(f"Asıl alan alt sınır eşleşti: {alt}")
 
         if ust and asa.get("ust") == ust:
             score += 1
-            reasons.append(f"Üst sınır: {ust}")
+            reasons.append(f"Asıl alan üst sınır eşleşti: {ust}")
 
         if nim_list:
-            inter = set(nim_list).intersection(set(prof_nim))
+            inter = sorted(set(nim_list).intersection(set(prof_nim)))
             if inter:
                 score += 2
-                reasons.append(f"Nim kesişimi: {', '.join(inter)}")
+                reasons.append("Nim kesişimi: " + ", ".join(inter))
 
         if score > 0:
-            results.append((score, m.get("name"), reasons))
+            scored.append((score, m.get("name", "(isimsiz)"), reasons))
 
-    results.sort(key=lambda x: x[0], reverse=True)
-    return results[:5]
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[:7]
 
 # ------------------ VERİYİ OKU ------------------
 if not DATA_PATH.exists():
-    st.error("data/makamlar.yaml bulunamadı.")
+    st.error("Veri dosyası bulunamadı: data/makamlar.yaml")
     st.stop()
 
 with open(DATA_PATH, "r", encoding="utf-8") as f:
-    makamlar = yaml.safe_load(f)
+    profiles = yaml.safe_load(f)
 
-names = [m.get("name") for m in makamlar]
+if not isinstance(profiles, list) or not profiles:
+    st.error("data/makamlar.yaml boş veya format hatalı. En üst seviye bir liste olmalı.")
+    st.stop()
+
+names = [m.get("name", "(isimsiz)") for m in profiles]
+
+# ------------------ PERDE LİSTELERİ (SEÇMELİ GİRİŞ) ------------------
+TAM_PERDELER = [
+    "yegâh", "aşîrān", "ırâk", "rast", "dügâh", "segâh", "çargâh", "nevâ", "hüseynî",
+    "evc", "gerdaniyye", "muhayyer", "tîz segâh", "tîz çargâh", "tîz nevâ"
+]
+
+NIM_PERDELER = [
+    "nerm bayatî", "nerm hisar", "pest aşîrān",
+    "acem-aşîrān", "dik acem-aşîrān",
+    "geveşt",
+    "şurî", "zengûle", "pest dügâh",
+    "kürdî", "dik kürdî",
+    "buselik", "nişābūr (buselik)",
+    "sabâ", "hicaz", "pest nevâ",
+    "bayatî", "hisar", "pest hüseynî",
+    "acem", "dik acem",
+    "mahûr",
+    "tîz şurî", "şehnāz", "pest muhayyer",
+    "sünbüle", "dik sünbüle"
+]
+
+ALL_PERDELER = ["—"] + TAM_PERDELER
 
 # ------------------ SEKME YAPISI ------------------
 tab1, tab2 = st.tabs(["📘 Ezgi Profilleri", "🎼 Nota Yükle"])
@@ -118,49 +124,75 @@ tab1, tab2 = st.tabs(["📘 Ezgi Profilleri", "🎼 Nota Yükle"])
 # ------------------ TAB 1: PROFİLLER ------------------
 with tab1:
     secili = st.selectbox("Ezgi için olası profil", names)
-    makam = next(m for m in makamlar if m.get("name") == secili)
 
-    col1, col2 = st.columns([1,1])
+    prof = next((m for m in profiles if m.get("name") == secili), None)
+    if prof is None:
+        st.error("Seçilen profil bulunamadı.")
+        st.stop()
+
+    col1, col2 = st.columns([1, 1])
 
     with col1:
         st.subheader("Ezgi Profili")
 
-        kp = makam.get("kullanilan_perdeler", {})
+        kp = prof.get("kullanilan_perdeler", {}) or {}
+        ns = prof.get("nazari_seyir", {}) or {}
+        asa = prof.get("asil_seyir_alani", {}) or {}
+
         st.markdown("### Kullanılan Perdeler")
-        st.markdown(f"**Tam:** {kp.get('tam','—')}")
-        nim = kp.get("nim", [])
-        if isinstance(nim, str): nim = [nim]
+        st.markdown(f"**Tam:** {kp.get('tam', '—')}")
+        nim = as_list(kp.get("nim"))
         st.markdown("**Nim:** " + (", ".join(nim) if nim else "—"))
 
-        ns = makam.get("nazari_seyir", {})
         st.markdown("### Nazari Seyir")
-        st.markdown(f"- Âgâz: {', '.join(ns.get('agaz',[]))}")
-        st.markdown(f"- Merkez: {', '.join(ns.get('kutb',[]))}")
-        st.markdown(f"- Karar: {', '.join(ns.get('karar',[]))}")
+        st.markdown(f"- **Âgâz:** {', '.join(as_list(ns.get('agaz'))) or '—'}")
+        st.markdown(f"- **Merkez:** {', '.join(as_list(ns.get('kutb'))) or '—'}")
+        st.markdown(f"- **Karar:** {', '.join(as_list(ns.get('karar'))) or '—'}")
 
-        asa = makam.get("asil_seyir_alani", {})
         st.markdown("### Asıl Seyir Alanı")
-        st.markdown(f"{asa.get('alt')} – {asa.get('ust')}")
+        st.markdown(f"**{asa.get('alt','—')} – {asa.get('ust','—')}**")
 
         st.markdown("### Süsleyen Perdeler")
-        st.markdown(", ".join(makam.get("susleyen_perdeler",[])))
+        sus = as_list(prof.get("susleyen_perdeler"))
+        st.markdown(", ".join(sus) if sus else "—")
 
-        st.markdown("### Lahnî Seyir")
-        for t in makam.get("lahni_seyir",{}).get("tasarruflar",[]):
-            st.markdown(f"- {t}")
+        st.markdown("### Lahnî Seyir Gözlemleri")
+        ts = as_list((prof.get("lahni_seyir") or {}).get("tasarruflar"))
+        if ts:
+            for t in ts:
+                st.markdown(f"- {t}")
+        else:
+            st.markdown("—")
 
     with col2:
-        st.subheader("Özet")
-        st.info("Bu panel seçilen ezgi profilinin pedagojik özetidir.")
+        st.subheader("Kısa Özet")
+        st.info("Bu panel, seçilen profilin hızlı özetidir. Nota analizinde, alttaki sekme kullanılır.")
 
+        ns = prof.get("nazari_seyir", {}) or {}
+        asa = prof.get("asil_seyir_alani", {}) or {}
+        kp = prof.get("kullanilan_perdeler", {}) or {}
+
+        st.markdown(
+            f"**Nazari Seyir:** Âgâz **{', '.join(as_list(ns.get('agaz'))) or '—'}**, "
+            f"Merkez **{', '.join(as_list(ns.get('kutb'))) or '—'}**, "
+            f"Karar **{', '.join(as_list(ns.get('karar'))) or '—'}**"
+        )
+        st.markdown(f"**Asıl Seyir Alanı:** **{asa.get('alt','—')} – {asa.get('ust','—')}**")
+        nim = as_list(kp.get("nim"))
+        st.markdown("**Nim Perdeler:** " + (", ".join(nim) if nim else "—"))
 
 # ------------------ TAB 2: NOTA YÜKLE ------------------
 with tab2:
-    st.subheader("🎼 Nota Yükleme ve Ezgi Çözümleme")
+    st.subheader("🎼 Nota Yükleme ve Olası Profil Önerisi")
+
+    st.caption(
+        "Not: PDF/PNG/JPG yüklediğinizde sistem notayı otomatik okumaz (OMR henüz yok). "
+        "Bu yüzden aşağıdan karar/merkez/alan/nim perdeleri seçerek öneri alırsınız."
+    )
 
     uploaded = st.file_uploader(
-        "Nota dosyasını yükleyin",
-        type=["pdf","png","jpg","jpeg","musicxml","xml"]
+        "Nota dosyasını yükleyin (PDF/PNG/JPG)",
+        type=["pdf", "png", "jpg", "jpeg"]
     )
 
     if uploaded:
@@ -169,51 +201,43 @@ with tab2:
 
         st.success(f"Yüklenen dosya: {uploaded.name}")
         st.markdown("### Önizleme")
-
         if ext == "pdf":
             show_pdf(file_bytes)
-        elif ext in ["png","jpg","jpeg"]:
-            show_image(file_bytes)
         else:
-            st.info("MusicXML yüklendi – otomatik çıkarım aktif.")
+            show_image(file_bytes)
 
-        auto = {}
-        if ext in ["musicxml","xml"]:
-            auto = extract_features_from_musicxml(file_bytes)
-            if auto:
-                st.info(f"Otomatik çıkarım (kaba): merkez={auto.get('merkez')}, karar={auto.get('karar')}")
+    st.divider()
+    st.markdown("### Ezgi Özelliklerini Seç (v1)")
 
-        st.markdown("### Ezgi Özellikleri (manuel)")
-        colA, colB = st.columns(2)
+    colA, colB = st.columns(2)
 
-        with colA:
-            karar = st.text_input("Karar perdesi")
-            merkez = st.text_input("Merkez perdesi")
-            alt = st.text_input("Alan alt sınırı")
-            ust = st.text_input("Alan üst sınırı")
+    with colA:
+        karar = st.selectbox("Karar perdesi", ALL_PERDELER, index=0)
+        merkez = st.selectbox("Merkez perdesi", ALL_PERDELER, index=0)
+        alt = st.selectbox("Asıl alan alt sınırı", ALL_PERDELER, index=0)
+        ust = st.selectbox("Asıl alan üst sınırı", ALL_PERDELER, index=0)
 
-        with colB:
-            nim_csv = st.text_input("Nim perdeler (virgülle)")
-            nim_list = [x.strip() for x in nim_csv.split(",") if x.strip()]
+    with colB:
+        nim_list = st.multiselect("Nim perdeler", NIM_PERDELER, default=[])
 
-        if st.button("Olası profilleri öner"):
-            results = score_profiles(
-                makamlar,
-                karar=karar or None,
-                merkez=merkez or None,
-                alt=alt or None,
-                ust=ust or None,
-                nim_list=nim_list
-            )
+    if st.button("Olası profilleri öner"):
+        results = score_profiles(
+            profiles,
+            karar=None if karar == "—" else karar,
+            merkez=None if merkez == "—" else merkez,
+            alt=None if alt == "—" else alt,
+            ust=None if ust == "—" else ust,
+            nim_list=nim_list
+        )
 
-            if not results:
-                st.warning("Eşleşme bulunamadı.")
-            else:
-                st.success("En olası profiller:")
-                for sc, name, reasons in results:
-                    st.markdown(f"**{name}** — skor {sc}")
-                    for r in reasons:
-                        st.markdown(f"- {r}")
+        if not results:
+            st.warning("Eşleşme bulunamadı. Birkaç alan daha seçmeyi deneyin (özellikle karar/merkez).")
+        else:
+            st.success("En olası profiller:")
+            for sc, name, reasons in results:
+                st.markdown(f"**{name}** — skor: **{sc}**")
+                for r in reasons:
+                    st.markdown(f"- {r}")
 
 st.divider()
-st.caption("Bu uygulama ezgiden hareketle çözümleme yapar; sonuçlar çıkarımsaldır.")
+st.caption("Bu uygulama ezgiden hareketle çözümleme yapmayı hedefler; sonuçlar çıkarımsaldır.")
