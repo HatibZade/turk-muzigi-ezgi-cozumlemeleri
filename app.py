@@ -153,12 +153,6 @@ with tab1:
         st.subheader("Özet")
         st.info("Bu panel seçilen ezgi profilinin pedagojik özetidir.")
 
-        st.download_button(
-            "📥 Profil setini YAML olarak indir",
-            data=Path("data/makamlar.yaml").read_bytes(),
-            file_name="makamlar.yaml",
-            mime="text/yaml"
-        )
 
 # ------------------ TAB 2: NOTA YÜKLE ------------------
 with tab2:
