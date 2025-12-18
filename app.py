@@ -342,7 +342,7 @@ with st.sidebar:
         "hicaz": ("Dik Saba / Hicaz", ["dik saba", "hicaz"]),
         "sehnaz": ("Tiz Dik Şurū / Şehnâz", ["tiz dik şurū", "tiz dik şuri", "şehnaz", "şehnâz", "sehnaz"]),
         # EKSİK NİM PERDELER (eklenenler)
-        "kurdi": ("Kürdî / Nim Kürdî", ["kurdi", "kürdi", "nim kurdi", "nim kürdi"]),
+        "kurdi": ("Kürdî", ["kurdi", "kürdi"]),
         "dik_kurdi": ("Dik Kürdî", ["dik kurdi", "dik kürdi"]),
         "dik_acem": ("Dik Acem", ["dik acem", "dik acem"]),
         # EKSİK NİM PERDELER (son eklenenler)
