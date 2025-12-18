@@ -1,38 +1,45 @@
+
 # app.py
-# Streamlit: Makam olasılığı + MusicXML mikrotonal işaret okuma (Halk müziği koma sayıları dahil)
+# Streamlit: Makam olasılığı + MusicXML mikrotonal işaret okuma (Halk müziği "koma sayıları" dahil)
 # Python 3.10+
 #
-# Kurallar (nihai):
-#  - ♯ üzerinde sayı yoksa => Bakıyye
-#  - ♯ üzerinde 5 varsa   => Küçük Mücenneb
-#  - ♭ üzerinde sayı yoksa => Küçük Mücenneb
-#  - ♭ üzerinde 4 varsa   => Bakıyye
-#  - ♭ üzerinde 1/2/3 varsa => Koma/İrha (mikro ama sınıf dışı ince ayar)
-#  - Oklu/özel işaretler (sayı yoksa):
-#      pest diyez = Bakıyye
-#      dik diyez  = Büyük Mücenneb
-#      dik bemol  = Bakıyye
-#      pest bemol = Büyük Mücenneb
-#      dik diyez  = pest bekar
-#      pest bemol = dik bekar
+# NİM FİLTRESİ (kritik):
+# - "Nim perde ismi vermediysem Hicaz gibi nimli makamlar olasılıklara girmesin" kuralı gereği,
+#   nim filtresi NOTADAN tespit edilen mikro işaretlere göre değil, "isim delili" (kullanıcının seçtiği nim perde adları) ile çalışır.
+# - Notadan mikro tespiti sağ tarafta sadece "teşhis" amaçlı gösterilir.
 #
-# Nim tespiti:
-#  - natural (işaretsiz) dışındaki her şey nim delilidir.
+# Halk müziği sayı kuralları (override):
+# - ♯ üzerinde sayı yoksa  => Bakıyye
+# - ♯ üzerinde 5 varsa     => Küçük Mücenneb
+# - ♭ üzerinde sayı yoksa  => Küçük Mücenneb
+# - ♭ üzerinde 4 varsa     => Bakıyye
+# - ♭ üzerinde 1/2/3 varsa => Koma/İrha
+#
+# Oklu/özel işaret kuralları (sayı yoksa):
+# - pest diyez = bakıyye
+# - diyez      = küçük mücenneb  (bu sadece "oklu tabloda" normal diyez için; sayı kuralları ve AEU/halk yazımı ağır basar)
+# - dik diyez  = büyük mücenneb
+# - dik bemol  = bakıyye
+# - bemol      = küçük mücenneb
+# - pest bemol = büyük mücenneb
+# - dik diyez  = pest bekar
+# - pest bemol = dik bekar
 #
 # Gereksinimler:
 #   pip install streamlit music21
 
 import io
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Any
+
 import streamlit as st
 
 try:
     from music21 import converter
     from music21 import note as m21note
     from music21 import chord as m21chord
-    from music21 import expressions as m21expr
     M21_OK = True
 except Exception:
     M21_OK = False
@@ -49,37 +56,51 @@ class MakamDef:
     merkez: str
     asil_alt: str
     asil_ust: str
-    # "nim gerektirir mi?" basit flag; isterse perdelerden de türetebilirsin
     requires_nim: bool
 
 
 MAKAMS: List[MakamDef] = [
-    MakamDef("Rast", "Rast", "Neva", "Rast", "Yegah", "Gerdaniye", False),
-    MakamDef("Uşşak", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", False),
-    MakamDef("Hüseyni", "Dügah", "Hüseyni", "Hüseyni", "Yegah", "Tiz Hüseyni", False),
-    MakamDef("Nihavend", "Rast", "Neva", "Rast", "Yegah", "Tiz Rast", False),
-    MakamDef("Hicaz", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", True),
-    MakamDef("Kürdî", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", False),
-    MakamDef("Nikriz", "Rast", "Neva", "Rast", "Yegah", "Gerdaniye", True),
-    MakamDef("Saba", "Dügah", "Çargah", "Dügah", "Yegah", "Neva", True),
-    MakamDef("Segah", "Segah", "Neva", "Segah", "Yegah", "Gerdaniye", False),
-    MakamDef("Hüzzam", "Segah", "Neva", "Segah", "Yegah", "Gerdaniye", True),
-    MakamDef("Buselik", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", False),
-    MakamDef("Karciğar", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", True),
-    MakamDef("Bayati", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", True),
-    MakamDef("Şehnaz", "Dügah", "Neva", "Dügah", "Yegah", "Tiz Neva", True),
-    MakamDef("Mahur", "Rast", "Gerdaniye", "Rast", "Yegah", "Tiz Rast", False),
-    MakamDef("Acem Aşiran", "Acem Aşiran", "Neva", "Acem Aşiran", "Rast", "Tiz Neva", False),
-    MakamDef("Hümayun", "Dügah", "Neva", "Dügah", "Yegah", "Gerdaniye", True),
+    MakamDef("Rast", "Rast", "Neva", "Rast", "Yegâh", "Gerdâniye", False),
+    MakamDef("Uşşak", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Hüseynî", "Dügâh", "Hüseynî", "Hüseynî", "Yegâh", "Tiz Hüseynî", False),
+    MakamDef("Nihâvend", "Rast", "Neva", "Rast", "Yegâh", "Tiz Rast", False),
+    MakamDef("Hicaz", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Kürdî", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Nikriz", "Rast", "Neva", "Rast", "Yegâh", "Gerdâniye", True),
+    MakamDef("Sabâ", "Dügâh", "Çargâh", "Dügâh", "Yegâh", "Neva", True),
+    MakamDef("Segâh", "Segâh", "Neva", "Segâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Hüzzâm", "Segâh", "Neva", "Segâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Bûselik", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", False),
+    MakamDef("Karcığar", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Bayâtî", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
+    MakamDef("Şehnâz", "Dügâh", "Neva", "Dügâh", "Yegâh", "Tiz Neva", True),
+    MakamDef("Mahûr", "Rast", "Gerdâniye", "Rast", "Yegâh", "Tiz Rast", False),
+    MakamDef("Acemâşîrân", "Acemâşîrân", "Neva", "Acemâşîrân", "Rast", "Tiz Neva", False),
+    MakamDef("Hümâyûn", "Dügâh", "Neva", "Dügâh", "Yegâh", "Gerdâniye", True),
 ]
 
 
 # -----------------------------
-# String normalizasyon
+# Normalizasyon (eşleme için)
+# - Üst çizgi/şapka/diakritik: karşılaştırmada yok sayılır
+# - Gösterimde ASLA normalize etmiyoruz
 # -----------------------------
 def norm(s: str) -> str:
     s = (s or "").strip().lower()
-    s = s.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç", "c").replace("ö", "o").replace("ü", "u")
+
+    # Birleşik diakritikleri çöz, sonra combining işaretleri kaldır
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+
+    # Türkçe karakterleri sadeleştir
+    s = (
+        s.replace("ı", "i")
+         .replace("ş", "s")
+         .replace("ğ", "g")
+         .replace("ç", "c")
+         .replace("ö", "o")
+         .replace("ü", "u")
+    )
     s = re.sub(r"\s+", " ", s)
     return s
 
@@ -108,22 +129,20 @@ def rank_makams(makams: List[MakamDef], features: Dict[str, str], topk: int) -> 
     return scored[:topk]
 
 
-def filter_makams_by_nim(makams: List[MakamDef], has_nim: bool) -> List[MakamDef]:
-    if has_nim:
+def filter_makams_by_nim(makams: List[MakamDef], allow_nim_makams: bool) -> List[MakamDef]:
+    if allow_nim_makams:
         return makams
     return [m for m in makams if not m.requires_nim]
 
 
 # -----------------------------
 # Mikrotonal okuma: Halk müziği koma sayıları + oklu işaretler
+# (Teşhis amaçlı)
 # -----------------------------
 DIGITS_RE = re.compile(r"\b([1-9]|1[0-9])\b")
 
+
 def extract_koma_number_from_text(text: str) -> Optional[int]:
-    """
-    Metinden ilk görülen sayıyı alır.
-    Örn: "♭4" / "b4" / "koma 4" / "4" -> 4
-    """
     if not text:
         return None
     m = DIGITS_RE.search(text)
@@ -136,10 +155,6 @@ def extract_koma_number_from_text(text: str) -> Optional[int]:
 
 
 def collect_note_attached_text(n: Any) -> str:
-    """
-    music21 Note üzerinde (varsa) sayı yakalamak için erişilebilecek metinleri toplar.
-    Not: MusicXML export'a göre değişebilir; bu yüzden çoklu kaynaktan ararız.
-    """
     texts: List[str] = []
 
     # Lyrics
@@ -150,10 +165,9 @@ def collect_note_attached_text(n: Any) -> str:
     except Exception:
         pass
 
-    # Expressions (TextExpression vs.)
+    # Expressions
     try:
         for ex in getattr(n, "expressions", []) or []:
-            # TextExpression olabilir
             if hasattr(ex, "content"):
                 texts.append(str(ex.content))
             else:
@@ -173,87 +187,13 @@ def collect_note_attached_text(n: Any) -> str:
     return " | ".join(texts)
 
 
-def classify_interval_from_accidental(
-    acc_name: str,
-    is_sharp: bool,
-    is_flat: bool,
-    is_natural: bool,
-    koma_number: Optional[int],
-) -> str:
-    """
-    Nihai sınıf döndürür:
-      - natural
-      - bakiyye
-      - kucuk_mucenneb
-      - buyuk_mucenneb
-      - koma_irha (1/2/3)
-      - unknown_micro (mikro ama sınıf belirsiz)
-    Öncelik: koma_number override.
-    """
-    # 1) Koma/üst sayı override (Halk müziği kuralı)
-    if koma_number is not None:
-        # Bemol üstü 1/2/3: koma/irha
-        if is_flat and koma_number in (1, 2, 3):
-            return "koma_irha"
-        # Bemol üstü 4: bakiyye bemol
-        if is_flat and koma_number == 4:
-            return "bakiyye"
-        # Diyez üstü 5: küçük mücenneb
-        if is_sharp and koma_number == 5:
-            return "kucuk_mucenneb"
-        # Diyez üstünde başka sayı varsa: mikro ama belirsiz
-        if is_sharp:
-            return "unknown_micro"
-        # Bemolde başka sayı varsa: mikro ama belirsiz
-        if is_flat:
-            return "unknown_micro"
-
-    # 2) Oklu/özel işaret yakalama (sayı yoksa)
-    a = norm(acc_name or "")
-
-    # Not: MusicXML/Font'a göre farklı isimler gelebilir. Burada olabildiğince kapsayıcı davranıyoruz.
-    # Aşağıdakiler, özellikle "pest"/"dik" gibi metinler taşınırsa çalışır.
-    if "pest" in a and ("sharp" in a or "diez" in a or "diyez" in a):
-        return "bakiyye"  # pest diyez = bakiyye
-    if "dik" in a and ("sharp" in a or "diez" in a or "diyez" in a):
-        return "buyuk_mucenneb"  # dik diyez = büyük mücenneb
-
-    if "dik" in a and ("flat" in a or "bemol" in a):
-        return "bakiyye"  # dik bemol = bakiyye
-    if "pest" in a and ("flat" in a or "bemol" in a):
-        return "buyuk_mucenneb"  # pest bemol = büyük mücenneb
-
-    # bekar (natural) varyantları (eşdeğerlik)
-    if "pest" in a and ("natural" in a or "bekar" in a or "nat" in a):
-        return "buyuk_mucenneb"  # pest bekar = dik diyez = büyük mücenneb
-    if "dik" in a and ("natural" in a or "bekar" in a or "nat" in a):
-        return "buyuk_mucenneb"  # dik bekar = pest bemol = büyük mücenneb
-
-    # 3) Normal işaretler (nihai kural seti)
-    if is_sharp:
-        # diyez üzerinde sayı yoksa => bakiyye
-        return "bakiyye"
-    if is_flat:
-        # bemol üzerinde sayı yoksa => küçük mücenneb
-        return "kucuk_mucenneb"
-    if is_natural:
-        return "natural"
-
-    return "natural"
-
-
 def note_accidental_flags(n: Any) -> Tuple[bool, bool, bool, str]:
-    """
-    Note'un accidental'ını music21 üzerinden okur.
-    Dönen: is_sharp, is_flat, is_natural, acc_name
-    """
     acc_name = ""
     is_sharp = is_flat = is_natural = False
     try:
         acc = n.pitch.accidental
         if acc:
             acc_name = str(acc.name or acc)
-            # music21'daki temel isimler genelde: 'sharp', 'flat', 'natural', 'double-sharp', etc.
             an = norm(acc.name or "")
             if "sharp" in an:
                 is_sharp = True
@@ -266,14 +206,63 @@ def note_accidental_flags(n: Any) -> Tuple[bool, bool, bool, str]:
     return is_sharp, is_flat, is_natural, acc_name
 
 
+def classify_interval_from_accidental(
+    acc_name: str,
+    is_sharp: bool,
+    is_flat: bool,
+    is_natural: bool,
+    koma_number: Optional[int],
+) -> str:
+    """
+    Çıktı sınıfları:
+      - natural
+      - bakiyye
+      - kucuk_mucenneb
+      - buyuk_mucenneb
+      - koma_irha
+      - unknown_micro
+    """
+    # 1) Halk müziği sayı override
+    if koma_number is not None:
+        if is_flat and koma_number in (1, 2, 3):
+            return "koma_irha"
+        if is_flat and koma_number == 4:
+            return "bakiyye"
+        if is_sharp and koma_number == 5:
+            return "kucuk_mucenneb"
+        # sayı var ama kural dışı ise yine mikro kabul et
+        if is_sharp or is_flat:
+            return "unknown_micro"
+
+    # 2) Oklu/özel ad yakalama (export'a bağlı)
+    a = norm(acc_name or "")
+    if "pest" in a and ("sharp" in a or "diyez" in a or "diez" in a):
+        return "bakiyye"
+    if "dik" in a and ("sharp" in a or "diyez" in a or "diez" in a):
+        return "buyuk_mucenneb"
+
+    if "dik" in a and ("flat" in a or "bemol" in a):
+        return "bakiyye"
+    if "pest" in a and ("flat" in a or "bemol" in a):
+        return "buyuk_mucenneb"
+
+    if "pest" in a and ("natural" in a or "bekar" in a or "nat" in a):
+        return "buyuk_mucenneb"  # pest bekar = dik diyez
+    if "dik" in a and ("natural" in a or "bekar" in a or "nat" in a):
+        return "buyuk_mucenneb"  # dik bekar = pest bemol
+
+    # 3) Sayı yoksa: senin nihai halk müziği kuralın
+    if is_sharp:
+        return "bakiyye"          # ♯ üstünde sayı yoksa bakiyye
+    if is_flat:
+        return "kucuk_mucenneb"   # ♭ üstünde sayı yoksa küçük mücenneb
+    if is_natural:
+        return "natural"
+
+    return "natural"
+
+
 def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
-    """
-    Score içindeki notalardan:
-      - interval_class sayımı
-      - nim var mı?
-      - örnek açıklama satırları
-    üretir.
-    """
     counts: Dict[str, int] = {
         "natural": 0,
         "bakiyye": 0,
@@ -298,9 +287,7 @@ def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
         )
         counts[interval_class] = counts.get(interval_class, 0) + 1
 
-        # örnek satır
-        if len(samples) < 12 and (interval_class != "natural"):
-            pitch_name = ""
+        if len(samples) < 12 and interval_class != "natural":
             try:
                 pitch_name = n.pitch.nameWithOctave
             except Exception:
@@ -310,17 +297,16 @@ def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
             )
 
     if score is None:
-        return {"counts": counts, "has_nim": False, "samples": samples}
+        return {"counts": counts, "has_micro": False, "samples": samples}
 
     for el in score.recurse():
         if isinstance(el, m21note.Note):
             handle_note(el)
         elif isinstance(el, m21chord.Chord):
-            # chord içindeki pitch'leri note gibi ele almak yerine chord'un notalarını gez
             for nn in el.notes:
                 handle_note(nn)
 
-    has_nim = (
+    has_micro = (
         counts["bakiyye"]
         + counts["kucuk_mucenneb"]
         + counts["buyuk_mucenneb"]
@@ -328,20 +314,21 @@ def detect_micro_intervals_in_score(score) -> Dict[str, Any]:
         + counts["unknown_micro"]
     ) > 0
 
-    return {"counts": counts, "has_nim": has_nim, "samples": samples}
+    return {"counts": counts, "has_micro": has_micro, "samples": samples}
 
 
 # -----------------------------
 # UI
 # -----------------------------
-st.set_page_config(page_title="Makam Tahmini (AEU + Halk Müziği Koma Sayıları)", layout="wide")
-st.title("Makam Olasılığı — AEU/Halk Müziği İşaret Okuma + Nim Filtresi")
+st.set_page_config(page_title="Makam Tahmini (AEU/Halk Notasyonu + Nim İsim Delili)", layout="wide")
+st.title("Makam Olasılığı — Nim İsim Delili + MusicXML Mikro Teşhis")
 
 with st.sidebar:
     st.subheader("Dosya Yükleme")
-    uploaded = st.file_uploader("MusicXML önerilir (pdf/xml/mxl)", type=["xml", "musicxml", "mxl", "pdf"])
-    st.caption("Halk müziği 'koma sayıları' MusicXML içinde metin olarak gelirse yakalanır. PDF'de OCR yoksa sayı okuma yapılamaz.")
+    uploaded = st.file_uploader("MusicXML önerilir (xml/mxl). PDF teşhis için OCR yok.", type=["xml", "musicxml", "mxl", "pdf"])
+    st.caption("Notadan mikro teşhis sağda gösterilir. Nim filtresi ise 'isim delili' ile çalışır.")
 
+    st.markdown("---")
     st.subheader("Ezgi Özellikleri")
     karar = st.text_input("Karar")
     guclu = st.text_input("Güçlü")
@@ -350,15 +337,43 @@ with st.sidebar:
     ust = st.text_input("Asıl alan üst sınır")
 
     st.markdown("---")
-    st.subheader("PDF için manuel nim")
-    manual_nim = st.checkbox("PDF yükledim ve ezgide mikro (nim) var", value=False)
+    st.subheader("Nim perde adı delili (isim olarak)")
+    # Şurî: u üst çizgi (uzatma) => Şurū, Nim Zengule: u şapkalı => Zengûle
+    NIM_NAME_OPTIONS: Dict[str, Tuple[str, List[str]]] = {
+        "nim_hisar": ("Bayâtî / Nim Hisâr", ["bayati", "bayati", "bayâtî", "nim hisar", "nim hisâr"]),
+        "nim_hicaz": ("Sabâ / Nim Hicaz", ["saba", "sabâ", "nim hicaz"]),
+        "nim_zengule": ("Şurū / Nim Zengûle", ["şuri", "şurî", "şurū", "suri", "nim zengule", "nim zengûle", "nim zengūle", "nim zengūle"]),
+        "nim_sehnaz": ("Tiz Şurī / Nim Şehnâz", ["tiz şuri", "tiz şurî", "tiz şurī", "tiz suri", "nim şehnaz", "nim sehnaz", "nim şehnâz"]),
+
+        # Çift ad gösterimleri (diyez/bemol yazımı)
+        "dik_zengule": ("Pest Dügâh / Dik Zengûle", ["pest dügâh", "pest dugah", "dik zengule", "dik zengûle", "dik zengūle"]),
+        "dik_hicaz": ("Pest Neva / Dik Hicaz", ["pest neva", "dik hicaz"]),
+        "hisar": ("Dik Bayâtî / Hisâr", ["dik bayati", "dik bayâtî", "hisar", "hisâr"]),
+        "dik_hisar": ("Pest Hüseynî / Dik Hisâr", ["pest hüseyni", "pest huseyni", "dik hisar", "dik hisâr"]),
+        "zengule": ("Dik Şurī / Zengûle", ["dik şuri", "dik şurî", "dik şurī", "dik suri", "zengule", "zengûle", "zengūle"]),
+        "hicaz": ("Dik Sabâ / Hicaz", ["dik saba", "dik sabâ", "hicaz"]),
+        "sehnaz": ("Tiz Dik Şurī / Şehnâz", ["tiz dik şuri", "tiz dik şurî", "tiz dik şurī", "tiz dik suri", "şehnaz", "sehnaz", "şehnâz"]),
+    }
+
+    labels = [v[0] for v in NIM_NAME_OPTIONS.values()]
+    selected_labels = st.multiselect(
+        "Metinde/analizde adı geçen nim perdeler (yoksa boş bırak)",
+        labels
+    )
+
+    label_to_key = {v[0]: k for k, v in NIM_NAME_OPTIONS.items()}
+    selected_keys = {label_to_key[lbl] for lbl in selected_labels if lbl in label_to_key}
+    has_nim_name_evidence = len(selected_keys) > 0
+    st.caption("Boş bırakırsan Hicaz/Nikriz/Sabâ gibi nimli makamlar filtrelenir (notada mikro olsa bile).")
+
+    st.markdown("---")
     topk = st.slider("Kaç sonuç gösterilsin?", 3, 17, 9)
 
 features = {"karar": karar, "guclu": guclu, "merkez": merkez, "alt": alt, "ust": ust}
 
 file_kind = None
 score = None
-micro = {"counts": {}, "has_nim": False, "samples": []}
+micro = {"counts": {}, "has_micro": False, "samples": []}
 file_error = None
 
 if uploaded is not None:
@@ -375,20 +390,16 @@ if uploaded is not None:
                 micro = detect_micro_intervals_in_score(score)
             except Exception as e:
                 file_error = f"MusicXML parse edilemedi: {e}"
-
     elif name.endswith(".pdf"):
         file_kind = "pdf"
 
-# Nim var mı?
-if file_kind == "musicxml":
-    has_nim = bool(micro.get("has_nim", False))
-elif file_kind == "pdf":
-    has_nim = bool(manual_nim)
-else:
-    # dosya yoksa sadece UI ile tahmin (nim bilgisi yok)
-    has_nim = False
+# Nim filtresinde ESAS: isim delili
+allow_nim_makams = has_nim_name_evidence
 
-candidates = filter_makams_by_nim(MAKAMS, has_nim)
+# Teşhis: notadan mikro var mı?
+has_micro_from_score = bool(micro.get("has_micro", False)) if file_kind == "musicxml" else False
+
+candidates = filter_makams_by_nim(MAKAMS, allow_nim_makams)
 ranked = rank_makams(candidates, features, topk)
 
 # -----------------------------
@@ -404,7 +415,10 @@ with left:
             st.error(file_error)
         else:
             st.write("**Dosya türü:**", file_kind)
-            st.write("**Nim (mikro) tespiti:**", "✅ Var" if has_nim else "❌ Yok")
+
+    st.write("**Nim (isim delili, filtre):**", "✅ Var" if allow_nim_makams else "❌ Yok")
+    if file_kind == "musicxml" and not file_error:
+        st.write("**Mikro (işaretlerden teşhis):**", "✅ Var" if has_micro_from_score else "❌ Yok")
 
     st.write("**Nim filtresi sonrası aday havuz:**", f"{len(candidates)} / {len(MAKAMS)}")
     st.markdown("---")
@@ -423,7 +437,7 @@ with left:
 with right:
     st.subheader("Mikrotonal Okuma Teşhisi (MusicXML)")
     if file_kind != "musicxml":
-        st.info("Mikrotonal teşhis için MusicXML yükle (PDF'de OCR yoksa sayı okunamaz).")
+        st.info("Teşhis için MusicXML yükle (PDF'de OCR yoksa sayı okunamaz).")
     elif file_error:
         st.warning("Dosya okunamadı; teşhis gösterilemiyor.")
     else:
@@ -438,20 +452,24 @@ with right:
             st.write("Mikro olay yakalanmadı (ya gerçekten yok, ya da export metni notaya bağlamamış olabilir).")
 
         st.markdown("---")
-        st.subheader("Okuma Kuralları (özet)")
+        st.subheader("Okuma Kuralları (özet, teşhis için)")
         st.markdown(
             """
-- **♯ üstünde sayı yoksa → Bakıyye**
-- **♯⁵ → Küçük Mücenneb**
-- **♭ üstünde sayı yoksa → Küçük Mücenneb**
-- **♭⁴ → Bakıyye**
-- **♭¹/²/³ → Koma/İrha**
-- Oklu/özel işaretler (sayı yoksa):
-  - pest diyez → Bakıyye
-  - dik diyez → Büyük Mücenneb
-  - dik bemol → Bakıyye
-  - pest bemol → Büyük Mücenneb
-  - pest bekar ↔ dik diyez
-  - dik bekar ↔ pest bemol
+**Halk müziği sayı override**
+- ♯ üstünde sayı yoksa → **Bakıyye**
+- ♯⁵ → **Küçük Mücenneb**
+- ♭ üstünde sayı yoksa → **Küçük Mücenneb**
+- ♭⁴ → **Bakıyye**
+- ♭¹/²/³ → **Koma/İrha**
+
+**Oklu/özel işaretler (sayı yoksa)**
+- pest diyez → Bakıyye
+- dik diyez → Büyük Mücenneb
+- dik bemol → Bakıyye
+- pest bemol → Büyük Mücenneb
+- pest bekar ↔ dik diyez
+- dik bekar ↔ pest bemol
+
+> Not: Makam filtresi bu teşhise göre değil, soldaki **nim isim delili** seçimine göre çalışır.
 """
         )
