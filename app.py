@@ -341,6 +341,18 @@ with st.sidebar:
         "zengule": ("Dik Şurū / Zengûle", ["dik şurū", "dik şuri", "zengule", "zengûle"]),
         "hicaz": ("Dik Saba / Hicaz", ["dik saba", "hicaz"]),
         "sehnaz": ("Tiz Dik Şurū / Şehnâz", ["tiz dik şurū", "tiz dik şuri", "şehnaz", "şehnâz", "sehnaz"]),
+        # EKSİK NİM PERDELER (eklenenler)
+        "kurdi": ("Kürdî / Nim Kürdî", ["kurdi", "kürdi", "nim kurdi", "nim kürdi"]),
+        "dik_kurdi": ("Dik Kürdî", ["dik kurdi", "dik kürdi"]),
+        "dik_acem": ("Dik Acem", ["dik acem", "dik acem"]),
+        # EKSİK NİM PERDELER (son eklenenler)
+        "dik_acemasiran": ("Dik Acemâşirân / Dik Acem", ["dik acemasiran", "dik acemâşirân", "dik acem"]),
+        "gevers": ("Geveşt", ["gevest", "geveşt"]),
+        "mahur": ("Mahur", ["mahur"]),
+        "buselik": ("Bûselik", ["buselik", "bûselik"]),
+
+
+
     }
 
     labels = [v[0] for v in NIM_NAME_OPTIONS.values()]
